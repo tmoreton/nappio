@@ -1,18 +1,31 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import '@/livekit/setup';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
-SplashScreen.preventAutoHideAsync();
+import { palette } from '@/constants/design';
+import { MonitorSessionProvider } from '@/state/monitor-session';
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <MonitorSessionProvider>
+      <StatusBar style="dark" />
+      <Stack
+        screenOptions={{
+          headerBackButtonDisplayMode: 'minimal',
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: palette.canvas },
+          headerTintColor: palette.ink,
+          contentStyle: { backgroundColor: palette.canvas },
+        }}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="baby" options={{ title: 'Baby camera', headerTransparent: true }} />
+        <Stack.Screen name="parent/pair" options={{ title: 'Pair a camera' }} />
+        <Stack.Screen
+          name="parent/monitor"
+          options={{ title: 'Baby monitor', headerTransparent: true }}
+        />
+      </Stack>
+    </MonitorSessionProvider>
   );
 }

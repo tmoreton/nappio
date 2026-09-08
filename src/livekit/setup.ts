@@ -1,0 +1,3 @@
+import './setup.native';
+
+export {};
