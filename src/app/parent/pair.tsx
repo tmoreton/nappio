@@ -1,7 +1,9 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActionButton } from '@/components/action-button';
 import { Screen } from '@/components/screen';
@@ -14,6 +16,7 @@ const HEADER_SCREEN_EDGES = ['bottom', 'left', 'right'] as const;
 
 export default function PairScreen() {
   const params = useLocalSearchParams<{ code?: string | string[] }>();
+  const insets = useSafeAreaInsets();
   const { setSession } = useMonitorSession();
   const incomingCode = Array.isArray(params.code) ? params.code[0] : params.code;
   const [code, setCode] = useState(() => normalizePairingCode(incomingCode ?? ''));
@@ -58,40 +61,55 @@ export default function PairScreen() {
     setScanning(true);
   }
 
-  if (scanning) {
-    return (
-      <View style={styles.scannerScreen}>
-        <CameraView
-          active
-          facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-          onBarcodeScanned={({ data }) => {
-            const scannedCode = pairingCodeFromQr(data);
-            if (!scannedCode) {
-              setError('That QR code is not a Nappio pairing code.');
-              return;
-            }
-            setScanning(false);
-            setCode(scannedCode);
-            void joinWithCode(scannedCode);
-          }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.scannerShade} pointerEvents="none">
-          <Text style={styles.scannerTitle}>Point at the QR code</Text>
-          <View style={styles.scanFrame} />
-          <Text style={styles.scannerHint}>Shown on the Baby Unit</Text>
-        </View>
-        <Pressable style={styles.scannerCancel} onPress={() => setScanning(false)}>
-          <Text style={styles.scannerCancelText}>Enter code instead</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-      <Screen contentStyle={styles.content} edges={HEADER_SCREEN_EDGES} scroll>
+    <>
+      <Stack.Screen options={{ headerShown: !scanning }} />
+      <StatusBar style={scanning ? 'light' : 'dark'} />
+      {scanning ? (
+        <View style={styles.scannerScreen}>
+          <CameraView
+            active
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={({ data }) => {
+              const scannedCode = pairingCodeFromQr(data);
+              if (!scannedCode) {
+                setError('That QR code is not a Nappio pairing code.');
+                return;
+              }
+              setScanning(false);
+              setCode(scannedCode);
+              void joinWithCode(scannedCode);
+            }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.scannerShade} pointerEvents="none">
+            <Text style={styles.scannerTitle}>Point at the QR code</Text>
+            <View style={styles.scanFrame} />
+            <Text style={styles.scannerHint}>Shown on the Baby Unit</Text>
+          </View>
+          <Pressable
+            accessibilityHint="Returns to the pairing setup screen"
+            accessibilityLabel="Back to pairing setup"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => setScanning(false)}
+            style={({ pressed }) => [
+              styles.scannerBack,
+              { top: insets.top + spacing.sm },
+              pressed && styles.pressed,
+            ]}>
+            <Text style={styles.scannerBackIcon}>‹</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.scannerCancel, { bottom: Math.max(insets.bottom, spacing.md) }]}
+            onPress={() => setScanning(false)}>
+            <Text style={styles.scannerCancelText}>Enter code instead</Text>
+          </Pressable>
+        </View>
+      ) : (
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+        <Screen contentStyle={styles.content} edges={HEADER_SCREEN_EDGES} scroll>
         <View style={styles.intro}>
           <Text style={styles.eyebrow}>CONNECT PRIVATELY</Text>
           <Text style={styles.title}>Choose how to connect</Text>
@@ -151,8 +169,10 @@ export default function PairScreen() {
             onPress={() => void joinWithCode(code)}
           />
         </View>
-      </Screen>
-    </KeyboardAvoidingView>
+        </Screen>
+      </KeyboardAvoidingView>
+      )}
+    </>
   );
 }
 
@@ -224,11 +244,32 @@ const styles = StyleSheet.create({
     width: 250,
   },
   scannerHint: { color: palette.white, fontSize: 14, marginTop: spacing.lg },
+  scannerBack: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderRadius: 30,
+    height: 60,
+    justifyContent: 'center',
+    left: spacing.md,
+    position: 'absolute',
+    shadowColor: palette.black,
+    shadowOffset: { height: 6, width: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    width: 60,
+    zIndex: 2,
+  },
+  scannerBackIcon: {
+    color: palette.ink,
+    fontSize: 48,
+    fontWeight: '300',
+    lineHeight: 50,
+    marginTop: -4,
+  },
   scannerCancel: {
     alignSelf: 'center',
     backgroundColor: palette.paper,
     borderRadius: radii.pill,
-    bottom: 54,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     position: 'absolute',
