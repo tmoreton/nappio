@@ -1,6 +1,5 @@
 import { Camera } from 'expo-camera';
 import { router } from 'expo-router';
-import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,12 +9,13 @@ import { ConnectionStatus } from '@/components/connection-status';
 import { PairingCode } from '@/components/pairing-code';
 import { palette, radii, spacing } from '@/constants/design';
 import { BabyRoom } from '@/livekit/baby-room';
+import { useMonitoringKeepAwake } from '@/livekit/use-monitoring-keep-awake';
 import { createPairing } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
 import type { MonitorStatus } from '@/types/monitor';
 
 export default function BabyScreen() {
-  useKeepAwake('nappio-baby-monitor');
+  useMonitoringKeepAwake();
   const { session, setSession, clearSession } = useMonitorSession();
   const [status, setStatus] = useState<MonitorStatus>('requesting-permissions');
   const [parentConnected, setParentConnected] = useState(false);
@@ -74,7 +74,19 @@ export default function BabyScreen() {
 
   if (error || !babySession) {
     return (
-      <SafeAreaView style={styles.setupSafe}>
+      <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.setupSafe}>
+        <View style={styles.setupHeader}>
+          <Pressable
+            accessibilityLabel="Back"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={stopMonitoring}
+            style={({ pressed }) => [styles.setupBackButton, pressed && styles.pressed]}>
+            <Text style={styles.setupBackIcon}>‹</Text>
+          </Pressable>
+          <Text style={styles.setupHeaderTitle}>Baby camera</Text>
+          <View style={styles.setupHeaderSpacer} />
+        </View>
         <View style={styles.setup}>
           <ConnectionStatus status={status} />
           <Text style={styles.setupTitle}>{error ? 'Camera could not start' : 'Starting Baby Unit…'}</Text>
@@ -108,31 +120,54 @@ export default function BabyScreen() {
 
   return (
     <View style={styles.container}>
-      <BabyRoom
-        session={babySession}
-        onStatusChange={setStatus}
-        onParentConnectedChange={setParentConnected}
-        onError={handleRoomError}
-      />
+      <View style={StyleSheet.absoluteFill}>
+        <BabyRoom
+          session={babySession}
+          onStatusChange={setStatus}
+          onParentConnectedChange={setParentConnected}
+          onError={handleRoomError}
+        />
+      </View>
 
-      <SafeAreaView pointerEvents="box-none" style={styles.overlay}>
-        <View style={styles.topRow}>
+      <SafeAreaView
+        edges={['top', 'bottom', 'left', 'right']}
+        style={styles.overlay}>
+        <View style={styles.cameraHeader}>
+          <Pressable
+            accessibilityLabel="Stop monitoring and go back"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={stopMonitoring}
+            style={({ pressed }) => [styles.cameraBackButton, pressed && styles.pressed]}>
+            <Text style={styles.cameraBackIcon}>‹</Text>
+          </Pressable>
           <ConnectionStatus
+            compact
             status={status}
             label={status === 'connected' ? (parentConnected ? 'Parent connected' : 'Waiting for parent') : undefined}
           />
         </View>
 
-        <View style={styles.bottomPanel}>
+        <View style={styles.bottomSheet}>
           {babySession.pairingCode ? (
             <PairingCode code={babySession.pairingCode} expiresAt={babySession.expiresAt} />
           ) : null}
           <View style={styles.controls}>
-            <Pressable style={styles.smallButton} onPress={() => setDimmed(true)}>
-              <Text style={styles.smallButtonText}>Dim screen</Text>
+            <Pressable
+              accessibilityHint="Hides the camera preview while monitoring continues"
+              accessibilityRole="button"
+              onPress={() => setDimmed(true)}
+              style={({ pressed }) => [styles.controlButton, pressed && styles.pressed]}>
+              <Text style={styles.controlIcon}>◐</Text>
+              <Text style={styles.controlButtonText}>Dim screen</Text>
             </Pressable>
-            <Pressable style={[styles.smallButton, styles.stopButton]} onPress={stopMonitoring}>
-              <Text style={[styles.smallButtonText, styles.stopButtonText]}>Stop</Text>
+            <View style={styles.controlDivider} />
+            <Pressable
+              accessibilityRole="button"
+              onPress={stopMonitoring}
+              style={({ pressed }) => [styles.controlButton, styles.stopButton, pressed && styles.pressed]}>
+              <View style={styles.stopIcon} />
+              <Text style={[styles.controlButtonText, styles.stopButtonText]}>End</Text>
             </Pressable>
           </View>
         </View>
@@ -144,10 +179,18 @@ export default function BabyScreen() {
           accessibilityLabel="Restore screen brightness"
           onPress={() => setDimmed(false)}
           style={styles.dimOverlay}>
-          <ConnectionStatus
-            status={status}
-            label={parentConnected ? 'Parent connected' : 'Waiting for parent'}
-          />
+          <View style={styles.dimStatus}>
+            <ConnectionStatus
+              status={status}
+              label={
+                status === 'connected'
+                  ? parentConnected
+                    ? 'Parent connected'
+                    : 'Waiting for parent'
+                  : undefined
+              }
+            />
+          </View>
           <Text style={styles.dimTitle}>Monitoring</Text>
           <Text style={styles.dimHint}>Tap anywhere to restore screen</Text>
         </Pressable>
@@ -159,6 +202,33 @@ export default function BabyScreen() {
 const styles = StyleSheet.create({
   container: { backgroundColor: palette.ink, flex: 1 },
   setupSafe: { backgroundColor: palette.canvas, flex: 1 },
+  setupHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 60,
+    paddingHorizontal: spacing.md,
+  },
+  setupBackButton: {
+    alignItems: 'center',
+    backgroundColor: palette.paper,
+    borderColor: palette.line,
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  setupBackIcon: {
+    color: palette.ink,
+    fontSize: 37,
+    fontWeight: '300',
+    lineHeight: 39,
+    marginLeft: -2,
+    marginTop: -3,
+  },
+  setupHeaderTitle: { color: palette.ink, fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
+  setupHeaderSpacer: { width: 44 },
   setup: {
     alignSelf: 'center',
     flex: 1,
@@ -174,23 +244,88 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'space-between',
     left: 0,
-    padding: spacing.md,
+    paddingHorizontal: 12,
+    paddingVertical: spacing.sm,
+    pointerEvents: 'box-none',
     position: 'absolute',
     right: 0,
     top: 0,
   },
-  topRow: { paddingTop: 44 },
-  bottomPanel: { gap: spacing.sm },
-  controls: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'flex-end' },
-  smallButton: {
-    backgroundColor: palette.paper,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
+  cameraHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
-  smallButtonText: { color: palette.ink, fontSize: 14, fontWeight: '800' },
-  stopButton: { backgroundColor: palette.redWash },
+  cameraBackButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,253,248,0.94)',
+    borderColor: 'rgba(255,255,255,0.84)',
+    borderRadius: 24,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+    ...Platform.select({
+      android: { elevation: 6 },
+      ios: {
+        shadowColor: palette.black,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+      },
+      web: { boxShadow: '0 3px 12px rgba(11,13,13,0.2)' },
+    }),
+  },
+  cameraBackIcon: {
+    color: palette.ink,
+    fontSize: 38,
+    fontWeight: '300',
+    lineHeight: 41,
+    marginLeft: -2,
+    marginTop: -4,
+  },
+  bottomSheet: {
+    backgroundColor: 'rgba(255,253,248,0.97)',
+    borderColor: 'rgba(255,255,255,0.72)',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: 14,
+    ...Platform.select({
+      android: { elevation: 10 },
+      ios: {
+        shadowColor: palette.black,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 24,
+      },
+      web: { boxShadow: '0 8px 24px rgba(11,13,13,0.2)' },
+    }),
+  },
+  controls: {
+    alignItems: 'center',
+    borderTopColor: palette.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    marginTop: 12,
+    paddingTop: 8,
+  },
+  controlButton: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  controlIcon: { color: palette.sageDark, fontSize: 19, fontWeight: '700' },
+  controlButtonText: { color: palette.ink, fontSize: 13, fontWeight: '800' },
+  controlDivider: { backgroundColor: palette.line, height: 24, width: StyleSheet.hairlineWidth },
+  stopButton: { flex: 0.62 },
+  stopIcon: { backgroundColor: palette.red, borderRadius: 3, height: 10, width: 10 },
   stopButtonText: { color: palette.red },
+  pressed: { opacity: 0.58 },
+  dimStatus: { alignSelf: 'center' },
   dimOverlay: {
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.96)',
