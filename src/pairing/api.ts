@@ -1,5 +1,10 @@
 import { getApiBaseUrl } from '@/config/env';
-import type { CreatePairingResponse, JoinPairingResponse } from '@/pairing/types';
+import * as Crypto from 'expo-crypto';
+import type {
+  CreatePairingResponse,
+  JoinPairingResponse,
+  ResumeSessionResponse,
+} from '@/pairing/types';
 
 type ErrorPayload = { error?: string };
 
@@ -13,14 +18,14 @@ export class PairingApiError extends Error {
   }
 }
 
-async function post<T>(path: string, body?: unknown): Promise<T> {
+async function post<T>(path: string, body?: unknown, requestId = Crypto.randomUUID()): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
 
   try {
     const response = await fetch(`${getApiBaseUrl()}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestId },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
@@ -42,10 +47,14 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   }
 }
 
-export function createPairing() {
-  return post<CreatePairingResponse>('/api/pair/create');
+export function createPairing(requestId?: string) {
+  return post<CreatePairingResponse>('/api/pair/create', undefined, requestId);
 }
 
-export function joinPairing(pairingCode: string) {
-  return post<JoinPairingResponse>('/api/pair/join', { pairingCode });
+export function joinPairing(pairingCode: string, requestId?: string) {
+  return post<JoinPairingResponse>('/api/pair/join', { pairingCode }, requestId);
+}
+
+export function resumeSession(recoveryToken: string) {
+  return post<ResumeSessionResponse>('/api/session/resume', { recoveryToken });
 }

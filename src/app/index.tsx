@@ -1,13 +1,47 @@
-import { router } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { router, type Href } from 'expo-router';
+import { useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { Screen } from '@/components/screen';
 import { palette, radii, spacing, type } from '@/constants/design';
+import { resumeSession } from '@/pairing/api';
+import { useMonitorSession } from '@/state/monitor-session';
 
 export default function HomeScreen() {
+  const { session, isHydrated, setSession, clearSession } = useMonitorSession();
+  const [isResuming, setIsResuming] = useState(false);
+
+  async function continueMonitoring() {
+    if (!session || isResuming) return;
+    setIsResuming(true);
+    try {
+      const recovered = await resumeSession(session.recoveryToken);
+      setSession(recovered);
+      router.push(recovered.role === 'baby' ? '/baby' : '/parent/monitor');
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'The saved session could not be restored.';
+      Alert.alert('Could not continue', message, [
+        { text: 'Keep for retry', style: 'cancel' },
+        { text: 'Remove session', style: 'destructive', onPress: clearSession },
+      ]);
+    } finally {
+      setIsResuming(false);
+    }
+  }
+
+  function startBabyCamera() {
+    clearSession();
+    router.push('/baby');
+  }
+
+  function startParentMonitor() {
+    clearSession();
+    router.push('/parent/pair');
+  }
+
   return (
-    <Screen contentStyle={styles.content}>
+    <Screen contentStyle={styles.content} scroll>
       <View style={styles.brand}>
         <View style={styles.mark} accessibilityElementsHidden>
           <View style={styles.markMoon} />
@@ -25,24 +59,43 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.actions}>
+        {isHydrated && session ? (
+          <ActionButton
+            label={isResuming ? 'Restoring…' : session.role === 'baby' ? 'Continue Baby Camera' : 'Continue Monitoring'}
+            detail="Resume the last private session"
+            icon={session.role === 'baby' ? 'camera' : 'monitor'}
+            disabled={isResuming}
+            onPress={() => void continueMonitoring()}
+          />
+        ) : null}
         <ActionButton
           label="Use as Baby Camera"
           detail="Share this phone’s camera and microphone"
           icon="camera"
-          onPress={() => router.push('/baby')}
+          onPress={startBabyCamera}
         />
         <ActionButton
           label="Monitor Baby"
           detail="Connect with a code or scan a QR code"
           icon="monitor"
           variant="secondary"
-          onPress={() => router.push('/parent/pair')}
+          onPress={startParentMonitor}
         />
       </View>
 
       <View style={styles.privacy}>
         <View style={styles.privacyDot} />
         <Text style={styles.privacyText}>No recording or playback history is built into Nappio.</Text>
+      </View>
+
+      <View style={styles.footer}>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/privacy' as Href)}>
+          <Text style={styles.footerLink}>Privacy</Text>
+        </Pressable>
+        <Text style={styles.footerDot}>•</Text>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/support' as Href)}>
+          <Text style={styles.footerLink}>Help & support</Text>
+        </Pressable>
       </View>
     </Screen>
   );
@@ -142,4 +195,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 18,
   },
+  footer: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  footerLink: { color: palette.sageDark, fontSize: 12, fontWeight: '700' },
+  footerDot: { color: palette.line, fontSize: 12 },
 });

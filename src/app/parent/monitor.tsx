@@ -1,43 +1,116 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ActionButton } from '@/components/action-button';
 import { ConnectionStatus } from '@/components/connection-status';
+import { Screen } from '@/components/screen';
 import { palette, radii, spacing } from '@/constants/design';
 import { showMonitoringAudioRoutePicker } from '@/livekit/audio-session';
 import { ParentRoom } from '@/livekit/parent-room';
+import {
+  getMonitoringAlertPermission,
+  notifyMonitoringInterrupted,
+  requestMonitoringAlerts,
+  type MonitoringAlertPermission,
+} from '@/monitoring/notifications';
+import { PairingApiError, resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
+import { hasFreshAccessToken } from '@/state/session-lifecycle';
 import type { MonitorStatus } from '@/types/monitor';
 
 export default function MonitorScreen() {
-  const { session, clearSession } = useMonitorSession();
+  const { session, isHydrated, setSession, clearSession } = useMonitorSession();
   const [status, setStatus] = useState<MonitorStatus>('connecting');
   const [babyConnected, setBabyConnected] = useState(false);
   const [audioOnly, setAudioOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPrepared, setIsPrepared] = useState(false);
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
+  const [alertPermission, setAlertPermission] = useState<MonitoringAlertPermission>('undetermined');
+  const appState = useRef(AppState.currentState);
+  const connectedOnce = useRef(false);
+  const babySeen = useRef(false);
+  const interruptionAlertSent = useRef(false);
   const parentSession = session?.role === 'parent' ? session : null;
 
   const handleStatusChange = useCallback((nextStatus: MonitorStatus) => {
     setStatus(nextStatus);
-    if (nextStatus === 'connected') setError(null);
+    if (nextStatus === 'connected') {
+      connectedOnce.current = true;
+      interruptionAlertSent.current = false;
+      setError(null);
+    } else if (
+      connectedOnce.current &&
+      (nextStatus === 'disconnected' || nextStatus === 'failed') &&
+      appState.current !== 'active' &&
+      !interruptionAlertSent.current
+    ) {
+      interruptionAlertSent.current = true;
+      void notifyMonitoringInterrupted('The connection to the Baby Unit was interrupted. Open Nappio to reconnect.');
+    }
   }, []);
 
   const handleRoomError = useCallback((message: string) => {
     setStatus('failed');
     setError(message);
+    if (connectedOnce.current && appState.current !== 'active' && !interruptionAlertSent.current) {
+      interruptionAlertSent.current = true;
+      void notifyMonitoringInterrupted('The connection to the Baby Unit was interrupted. Open Nappio to reconnect.');
+    }
+  }, []);
+
+  const handleBabyConnectedChange = useCallback((connected: boolean) => {
+    setBabyConnected(connected);
+    if (connected) {
+      babySeen.current = true;
+      interruptionAlertSent.current = false;
+    } else if (babySeen.current && appState.current !== 'active' && !interruptionAlertSent.current) {
+      interruptionAlertSent.current = true;
+      void notifyMonitoringInterrupted('The Baby Unit left the monitoring room. Open Nappio to check it.');
+    }
   }, []);
 
   useEffect(() => {
+    if (!isHydrated || isPrepared) return;
     if (!parentSession) {
       router.replace('/parent/pair');
+      return;
     }
-  }, [parentSession]);
+
+    let cancelled = false;
+    const currentSession = parentSession;
+    async function prepare() {
+      if (hasFreshAccessToken(currentSession)) {
+        setIsPrepared(true);
+        return;
+      }
+      const recovered = await resumeSession(currentSession.recoveryToken);
+      if (cancelled) return;
+      if (recovered.role !== 'parent') throw new Error('The saved session belongs to the Baby Unit.');
+      setSession(recovered);
+      setIsPrepared(true);
+    }
+    prepare().catch((reason: unknown) => {
+      if (cancelled) return;
+      if (reason instanceof PairingApiError && reason.status === 410) clearSession();
+      setStatus('failed');
+      setError(reason instanceof Error ? reason.message : 'Could not restore monitoring.');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clearSession, isHydrated, isPrepared, parentSession, recoveryAttempt, setSession]);
 
   useEffect(() => {
+    void getMonitoringAlertPermission().then(setAlertPermission).catch(() => undefined);
     const subscription = AppState.addEventListener('change', (nextState) => {
+      appState.current = nextState;
       if (nextState !== 'active') {
         setAudioOnly(true);
+      } else {
+        void getMonitoringAlertPermission().then(setAlertPermission).catch(() => undefined);
       }
     });
     return () => subscription.remove();
@@ -48,8 +121,51 @@ export default function MonitorScreen() {
     router.replace('/');
   }
 
-  if (!parentSession) {
+  async function enableAlerts() {
+    if (alertPermission === 'denied') {
+      await Linking.openSettings();
+      return;
+    }
+    const permission = await requestMonitoringAlerts();
+    setAlertPermission(permission);
+  }
+
+  if (!isHydrated || !parentSession) {
     return <View style={styles.container} />;
+  }
+
+  if (!isPrepared) {
+    return (
+      <Screen contentStyle={styles.recoveryContent}>
+        <ConnectionStatus status={status} />
+        <Text style={styles.recoveryTitle}>
+          {error ? 'Monitoring could not resume' : 'Restoring monitoring…'}
+        </Text>
+        <Text style={styles.recoveryCopy}>
+          {error ?? 'Refreshing the private connection to the Baby Unit.'}
+        </Text>
+        {error ? (
+          <View style={styles.recoveryActions}>
+            <ActionButton
+              label="Try Again"
+              onPress={() => {
+                setError(null);
+                setStatus('connecting');
+                setRecoveryAttempt((value) => value + 1);
+              }}
+            />
+            <ActionButton
+              label="Pair Again"
+              variant="secondary"
+              onPress={() => {
+                clearSession();
+                router.replace('/parent/pair');
+              }}
+            />
+          </View>
+        ) : null}
+      </Screen>
+    );
   }
 
   let statusLabel: string | undefined;
@@ -63,7 +179,7 @@ export default function MonitorScreen() {
         session={parentSession}
         audioOnly={audioOnly}
         onStatusChange={handleStatusChange}
-        onBabyConnectedChange={setBabyConnected}
+        onBabyConnectedChange={handleBabyConnectedChange}
         onError={handleRoomError}
       />
 
@@ -76,6 +192,22 @@ export default function MonitorScreen() {
         </View>
 
         <View style={styles.bottomArea}>
+          {alertPermission !== 'granted' ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void enableAlerts()}
+              style={({ pressed }) => [styles.alertsCard, pressed && styles.pressed]}>
+              <View style={styles.alertsCopy}>
+                <Text style={styles.alertsTitle}>Turn on interruption alerts</Text>
+                <Text style={styles.alertsDetail}>
+                  {alertPermission === 'denied'
+                    ? 'Enable notifications in Settings to be warned if monitoring stops.'
+                    : 'Get a notification if the Baby Unit disconnects while this screen is inactive.'}
+                </Text>
+              </View>
+              <Text style={styles.alertsAction}>{alertPermission === 'denied' ? 'Settings' : 'Enable'}</Text>
+            </Pressable>
+          ) : null}
           {error ? (
             <View style={styles.errorCard}>
               <Text style={styles.errorTitle}>Monitoring interrupted</Text>
@@ -113,6 +245,10 @@ export default function MonitorScreen() {
 
 const styles = StyleSheet.create({
   container: { backgroundColor: palette.ink, flex: 1 },
+  recoveryContent: { justifyContent: 'center', paddingBottom: spacing.xxl },
+  recoveryTitle: { color: palette.ink, fontSize: 30, fontWeight: '800', marginTop: spacing.lg },
+  recoveryCopy: { color: palette.muted, fontSize: 16, lineHeight: 24, marginTop: spacing.sm },
+  recoveryActions: { gap: spacing.sm, marginTop: spacing.xl },
   overlay: {
     bottom: 0,
     justifyContent: 'space-between',
@@ -131,6 +267,18 @@ const styles = StyleSheet.create({
   },
   routeButtonText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
   bottomArea: { gap: spacing.sm },
+  alertsCard: {
+    alignItems: 'center',
+    backgroundColor: palette.yellowWash,
+    borderRadius: radii.md,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: 12,
+  },
+  alertsCopy: { flex: 1 },
+  alertsTitle: { color: palette.ink, fontSize: 13, fontWeight: '800' },
+  alertsDetail: { color: palette.muted, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  alertsAction: { color: palette.yellow, fontSize: 12, fontWeight: '800' },
   errorCard: { backgroundColor: palette.redWash, borderRadius: radii.md, padding: spacing.md },
   errorTitle: { color: palette.red, fontSize: 14, fontWeight: '800' },
   errorCopy: { color: palette.red, fontSize: 12, lineHeight: 17, marginTop: 3 },
@@ -166,4 +314,5 @@ const styles = StyleSheet.create({
   },
   disconnectText: { color: palette.red, fontSize: 16 },
   disconnectLabel: { color: palette.red, fontSize: 11, fontWeight: '800', marginTop: 4 },
+  pressed: { opacity: 0.7 },
 });

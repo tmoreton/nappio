@@ -3,47 +3,77 @@ import test from 'node:test';
 
 import { PairingStore, PairingStoreError } from '../src/pairing-store';
 
-test('creates a private pairing and allows exactly one claim', () => {
+const recoveryTokens = ['a'.repeat(43), 'b'.repeat(43)];
+
+test('creates a private pairing and allows exactly one completed claim', () => {
+  let recoveryIndex = 0;
   const store = new PairingStore({
     ttlMs: 300_000,
+    sessionTtlMs: 86_400_000,
     now: () => 1_000,
     codeGenerator: () => '482193',
     roomIdGenerator: () => 'monitor-private-room',
     keyGenerator: () => 'secret-e2ee-key',
+    recoveryTokenGenerator: () => recoveryTokens[recoveryIndex++]!,
   });
 
-  const created = store.create();
-  assert.equal(created.pairingCode, '482193');
-  assert.equal(created.roomId, 'monitor-private-room');
-  assert.equal(created.encryptionKey, 'secret-e2ee-key');
-  assert.equal(created.expiresAt.toISOString(), new Date(301_000).toISOString());
-  assert.equal(store.claim('482193'), created);
+  const { pairing, recoveryToken: babyRecoveryToken } = store.create();
+  assert.equal(pairing.pairingCode, '482193');
+  assert.equal(pairing.roomId, 'monitor-private-room');
+  assert.equal(pairing.encryptionKey, 'secret-e2ee-key');
+  assert.equal(pairing.expiresAt.toISOString(), new Date(301_000).toISOString());
+  assert.equal(pairing.sessionExpiresAt.toISOString(), new Date(86_401_000).toISOString());
+
+  const pending = store.beginClaim('482193');
+  assert.equal(store.resume(babyRecoveryToken).role, 'baby');
+  assert.equal(store.completeClaim('482193', pending.recoveryToken, pending.requestId), pairing);
+  assert.equal(store.resume(pending.recoveryToken).role, 'parent');
   assert.throws(
-    () => store.claim('482193'),
+    () => store.beginClaim('482193'),
     (error: unknown) => error instanceof PairingStoreError && error.code === 'already-used',
   );
 });
 
-test('rejects expired pairing codes', () => {
+test('rejects expired pairing codes while preserving the resumable baby session', () => {
   let now = 1_000;
   const store = new PairingStore({
     ttlMs: 1_000,
+    sessionTtlMs: 10_000,
     now: () => now,
     codeGenerator: () => '111222',
+    recoveryTokenGenerator: () => 'c'.repeat(43),
   });
-  store.create();
+  const { recoveryToken } = store.create();
   now = 2_000;
 
   assert.throws(
-    () => store.claim('111222'),
+    () => store.beginClaim('111222'),
     (error: unknown) => error instanceof PairingStoreError && error.code === 'expired',
+  );
+  assert.equal(store.resume(recoveryToken).role, 'baby');
+});
+
+test('expires recovery credentials at the session deadline', () => {
+  let now = 1_000;
+  const store = new PairingStore({
+    ttlMs: 1_000,
+    sessionTtlMs: 2_000,
+    now: () => now,
+    recoveryTokenGenerator: () => 'd'.repeat(43),
+  });
+  const { recoveryToken } = store.create();
+  now = 3_000;
+
+  assert.throws(
+    () => store.resume(recoveryToken),
+    (error: unknown) => error instanceof PairingStoreError && error.code === 'session-expired',
   );
 });
 
 test('rejects unknown codes', () => {
-  const store = new PairingStore({ ttlMs: 1_000 });
+  const store = new PairingStore({ ttlMs: 1_000, sessionTtlMs: 10_000 });
   assert.throws(
-    () => store.claim('000000'),
+    () => store.beginClaim('000000'),
     (error: unknown) => error instanceof PairingStoreError && error.code === 'not-found',
   );
 });

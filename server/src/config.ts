@@ -4,6 +4,7 @@ export type ServerConfig = {
   livekitApiSecret: string;
   port: number;
   pairingTtlMs: number;
+  sessionTtlMs: number;
   tokenTtlSeconds: number;
 };
 
@@ -33,6 +34,7 @@ export function loadServerConfig(env: NodeJS.ProcessEnv = process.env): ServerCo
     livekitApiSecret,
     port: positiveInteger(env.PORT, 8787, 'PORT'),
     pairingTtlMs: positiveInteger(env.PAIRING_TTL_SECONDS, 300, 'PAIRING_TTL_SECONDS') * 1000,
+    sessionTtlMs: positiveInteger(env.SESSION_TTL_SECONDS, 86_400, 'SESSION_TTL_SECONDS') * 1000,
     tokenTtlSeconds: positiveInteger(env.TOKEN_TTL_SECONDS, 21_600, 'TOKEN_TTL_SECONDS'),
   };
 }

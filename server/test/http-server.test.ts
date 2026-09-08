@@ -13,6 +13,7 @@ const config: ServerConfig = {
   livekitApiSecret: 'unused-in-test',
   port: 0,
   pairingTtlMs: 300_000,
+  sessionTtlMs: 86_400_000,
   tokenTtlSeconds: 3600,
 };
 
@@ -25,9 +26,15 @@ class FakeTokens implements TokenService {
 test('create/join API returns role tokens and makes codes single-use', async () => {
   const store = new PairingStore({
     ttlMs: config.pairingTtlMs,
+    sessionTtlMs: config.sessionTtlMs,
     codeGenerator: () => '482193',
     roomIdGenerator: () => 'monitor-room',
     keyGenerator: () => 'e2ee-key',
+    recoveryTokenGenerator: (() => {
+      const tokens = ['a'.repeat(43), 'b'.repeat(43)];
+      let index = 0;
+      return () => tokens[index++]!;
+    })(),
   });
   const server = createPairingServer({ config, tokens: new FakeTokens(), store });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -35,16 +42,31 @@ test('create/join API returns role tokens and makes codes single-use', async () 
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
-    const createdResponse = await fetch(`${baseUrl}/api/pair/create`, { method: 'POST' });
+    const createRequestId = '11111111-1111-4111-8111-111111111111';
+    const createdResponse = await fetch(`${baseUrl}/api/pair/create`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': createRequestId },
+    });
     assert.equal(createdResponse.status, 201);
     const created = (await createdResponse.json()) as Record<string, string>;
     assert.equal(created.pairingCode, '482193');
     assert.equal(created.babyToken, 'baby-token-for-monitor-room');
     assert.equal(created.encryptionKey, 'e2ee-key');
+    assert.match(created.babyRecoveryToken, /^[A-Za-z0-9_-]{43}$/);
 
+    const repeatedCreate = await fetch(`${baseUrl}/api/pair/create`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': createRequestId },
+    });
+    assert.equal(repeatedCreate.status, 201);
+    const repeatedCreated = (await repeatedCreate.json()) as Record<string, string>;
+    assert.equal(repeatedCreated.roomId, created.roomId);
+    assert.equal(repeatedCreated.babyRecoveryToken, created.babyRecoveryToken);
+
+    const joinRequestId = '22222222-2222-4222-8222-222222222222';
     const joinedResponse = await fetch(`${baseUrl}/api/pair/join`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': joinRequestId },
       body: JSON.stringify({ pairingCode: '482193' }),
     });
     assert.equal(joinedResponse.status, 200);
@@ -52,6 +74,27 @@ test('create/join API returns role tokens and makes codes single-use', async () 
     assert.equal(joined.parentToken, 'parent-token-for-monitor-room');
     assert.equal(joined.roomId, created.roomId);
     assert.equal(joined.encryptionKey, created.encryptionKey);
+    assert.match(joined.parentRecoveryToken, /^[A-Za-z0-9_-]{43}$/);
+
+    const repeatedJoin = await fetch(`${baseUrl}/api/pair/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': joinRequestId },
+      body: JSON.stringify({ pairingCode: '482193' }),
+    });
+    assert.equal(repeatedJoin.status, 200);
+    const repeatedJoined = (await repeatedJoin.json()) as Record<string, string>;
+    assert.equal(repeatedJoined.parentRecoveryToken, joined.parentRecoveryToken);
+
+    const resumedResponse = await fetch(`${baseUrl}/api/session/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recoveryToken: joined.parentRecoveryToken }),
+    });
+    assert.equal(resumedResponse.status, 200);
+    const resumed = (await resumedResponse.json()) as Record<string, string>;
+    assert.equal(resumed.role, 'parent');
+    assert.equal(resumed.token, 'parent-token-for-monitor-room');
+    assert.equal(resumed.recoveryToken, joined.parentRecoveryToken);
 
     const replay = await fetch(`${baseUrl}/api/pair/join`, {
       method: 'POST',
@@ -59,6 +102,41 @@ test('create/join API returns role tokens and makes codes single-use', async () 
       body: JSON.stringify({ pairingCode: '482193' }),
     });
     assert.equal(replay.status, 409);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+test('a token-generation failure does not consume the pairing code', async () => {
+  let parentAttempts = 0;
+  const tokens: TokenService = {
+    async createToken(role, roomId) {
+      if (role === 'parent' && parentAttempts++ === 0) throw new Error('temporary token failure');
+      return `${role}-token-for-${roomId}`;
+    },
+  };
+  const store = new PairingStore({
+    ttlMs: config.pairingTtlMs,
+    sessionTtlMs: config.sessionTtlMs,
+    codeGenerator: () => '654321',
+  });
+  const server = createPairingServer({ config, tokens, store });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  try {
+    await fetch(`${baseUrl}/api/pair/create`, { method: 'POST' });
+    const join = () =>
+      fetch(`${baseUrl}/api/pair/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pairingCode: '654321' }),
+      });
+    assert.equal((await join()).status, 500);
+    assert.equal((await join()).status, 200);
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),

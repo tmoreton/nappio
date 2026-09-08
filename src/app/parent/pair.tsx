@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Crypto from 'expo-crypto';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useRef, useState } from 'react';
@@ -26,22 +27,29 @@ export default function PairScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const inputRef = useRef<TextInput>(null);
   const submitting = useRef(false);
+  const joinRequest = useRef({ code: '', id: Crypto.randomUUID() });
 
   async function joinWithCode(value: string) {
     const normalized = normalizePairingCode(value);
     if (normalized.length !== 6 || submitting.current) return;
     submitting.current = true;
+    if (joinRequest.current.code !== normalized) {
+      joinRequest.current = { code: normalized, id: Crypto.randomUUID() };
+    }
     setIsSubmitting(true);
     setError(null);
     try {
-      const pairing = await joinPairing(normalized);
+      const pairing = await joinPairing(normalized, joinRequest.current.id);
       setSession({
         role: 'parent',
         roomId: pairing.roomId,
         token: pairing.parentToken,
+        tokenExpiresAt: pairing.tokenExpiresAt,
         livekitUrl: pairing.livekitUrl,
         encryptionKey: pairing.encryptionKey,
         expiresAt: pairing.expiresAt,
+        sessionExpiresAt: pairing.sessionExpiresAt,
+        recoveryToken: pairing.parentRecoveryToken,
       });
       router.replace('/parent/monitor');
     } catch (reason) {

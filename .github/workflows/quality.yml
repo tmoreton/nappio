@@ -1,0 +1,32 @@
+name: Verify Nappio changes
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install app dependencies
+        run: npm ci
+      - name: Install Worker dependencies
+        run: npm --prefix worker ci
+      - name: Run lint, type checks, and tests
+        run: npm run check
+      - name: Check Expo project health
+        run: npx expo-doctor
+      - name: Verify static export
+        run: npx expo export --platform web
+        env:
+          EXPO_WEB_BASE_URL: /nappio

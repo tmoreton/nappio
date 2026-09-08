@@ -27,6 +27,12 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Install Worker dependencies
+        run: npm --prefix worker ci
+      - name: Verify app and pairing services
+        run: npm run check
+      - name: Check Expo project health
+        run: npx expo-doctor
       - name: Export static website
         run: npx expo export --platform web
         env:

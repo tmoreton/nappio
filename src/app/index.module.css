@@ -648,6 +648,101 @@
   font-size: 19px;
 }
 
+.legal {
+  padding: 118px max(24px, calc((100% - 1180px) / 2));
+  background: #1c2d2a;
+  color: #fffdf8;
+}
+
+.legalIntro {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 46px 80px;
+  align-items: start;
+}
+
+.legalIntro h2,
+.support h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(42px, 5vw, 68px);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -3px;
+}
+
+.legalIntro > p:last-child {
+  grid-column: 2;
+  max-width: 720px;
+  margin: -22px 0 0;
+  color: #b8c8c3;
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.legalGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 72px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 25px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.legalGrid article {
+  min-height: 205px;
+  padding: 30px;
+  background: #243835;
+}
+
+.legalGrid h3 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+
+.legalGrid p {
+  margin: 0;
+  color: #b8c8c3;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.legalGrid a {
+  color: #fffdf8;
+  text-underline-offset: 3px;
+}
+
+.support {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 110px 0;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 60px;
+}
+
+.support h2 {
+  margin: 16px 0;
+}
+
+.support > div > p:last-child {
+  max-width: 660px;
+  margin: 0;
+  color: #68726f;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.supportActions {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  flex: 0 0 auto;
+}
+
 .footer {
   width: min(1180px, calc(100% - 48px));
   min-height: 128px;
@@ -672,9 +767,21 @@
   text-align: right;
 }
 
+.footer a {
+  color: #516b64;
+  text-underline-offset: 3px;
+}
+
 .primaryCta:focus-visible,
 .textLink:focus-visible,
 .header a:focus-visible {
+  outline: 3px solid #e4a387;
+  outline-offset: 4px;
+}
+
+.legal a:focus-visible,
+.support a:focus-visible,
+.footer a:focus-visible {
   outline: 3px solid #e4a387;
   outline-offset: 4px;
 }
@@ -695,9 +802,13 @@
   }
 
   .sectionIntro,
-  .how {
+  .how,
+  .legalIntro {
     grid-template-columns: 1fr;
   }
+
+  .legalIntro > p:last-child { grid-column: auto; margin-top: 0; }
+  .support { align-items: flex-start; flex-direction: column; }
 
   .how { gap: 65px; }
   .sectionIntro { gap: 22px; }
@@ -716,6 +827,7 @@
   .hero,
   .features,
   .beta,
+  .support,
   .footer {
     width: min(100% - 32px, 1180px);
   }
@@ -765,6 +877,13 @@
   .featureCard h3 { margin-top: 55px; }
 
   .how { padding-top: 88px; padding-bottom: 88px; }
+
+  .legal { padding-top: 86px; padding-bottom: 86px; }
+  .legalGrid { grid-template-columns: 1fr; margin-top: 48px; }
+  .legalGrid article { min-height: 0; }
+
+  .support { padding: 82px 0; }
+  .supportActions { align-items: flex-start; flex-direction: column; }
 
   .beta {
     margin-top: 74px;

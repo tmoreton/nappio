@@ -113,7 +113,8 @@ export default function LandingPage() {
           </a>
           <nav aria-label="Main navigation">
             <a href="#how-it-works">How it works</a>
-            <a href="#privacy">Privacy</a>
+            <a href="#privacy-policy">Privacy</a>
+            <a href="#support">Support</a>
             <a className={styles.navCta} href="#beta">TestFlight beta</a>
           </nav>
         </header>
@@ -153,7 +154,7 @@ export default function LandingPage() {
             <h2>A baby monitor should help you pay attention—not ask for more of it.</h2>
           </section>
 
-          <section className={styles.features} id="privacy">
+          <section className={styles.features} id="security">
             <div className={styles.sectionIntro}>
               <p className={styles.eyebrow}>CALM BY DESIGN</p>
               <h2>The essentials, thoughtfully handled.</h2>
@@ -196,12 +197,60 @@ export default function LandingPage() {
               <div><small>COMING TO</small><strong>TestFlight</strong></div>
             </div>
           </section>
+
+          <section className={styles.legal} id="privacy-policy">
+            <div className={styles.legalIntro}>
+              <p className={styles.eyebrow}>PRIVACY POLICY · UPDATED SEPTEMBER 8, 2026</p>
+              <h2>Private by design, explained plainly.</h2>
+              <p>
+                Nappio makes a temporary private connection between two phones. It does not create accounts, sell personal information, use advertising analytics, or provide recording.
+              </p>
+            </div>
+            <div className={styles.legalGrid}>
+              <article>
+                <h3>Camera, microphone, and alerts</h3>
+                <p>The Baby Unit uses its camera and microphone only for live monitoring. Optional Parent Unit notifications warn when an active connection is interrupted.</p>
+              </article>
+              <article>
+                <h3>Temporary pairing data</h3>
+                <p>Cloudflare temporarily stores a random code, room identifier, encryption key, hashed role-specific recovery credentials, and expiry times. Codes expire after five minutes and session records within 24 hours. Short-lived network address data is processed to prevent abuse.</p>
+              </article>
+              <article>
+                <h3>Encrypted live media</h3>
+                <p>LiveKit relays media encrypted on the phones. Nappio does not enable server-side recording. Cloudflare and LiveKit may process connection metadata and operational logs under their own privacy and security practices.</p>
+              </article>
+              <article>
+                <h3>On-device storage and deletion</h3>
+                <p>Recovery credentials and current encryption material are protected by iOS Keychain or Android Keystore. Ending monitoring removes the saved credential from that phone. Server session records are automatically removed at expiry.</p>
+              </article>
+              <article>
+                <h3>Children and safety</h3>
+                <p>Nappio is intended for adults and does not request a child profile or intentionally collect information directly from children. It is not a medical device or a substitute for adult supervision.</p>
+              </article>
+              <article>
+                <h3>Questions and requests</h3>
+                <p>For privacy questions, access or deletion requests, email <a href="mailto:tmoreton89@gmail.com?subject=Nappio%20privacy">tmoreton89@gmail.com</a>.</p>
+              </article>
+            </div>
+          </section>
+
+          <section className={styles.support} id="support">
+            <div>
+              <p className={styles.eyebrow}>HELP WHEN YOU NEED IT</p>
+              <h2>Nappio support</h2>
+              <p>For connection help, beta feedback, or a technical problem, contact the developer directly.</p>
+            </div>
+            <div className={styles.supportActions}>
+              <a className={styles.primaryCta} href="mailto:tmoreton89@gmail.com?subject=Nappio%20support">Email support <span>↗</span></a>
+              <a className={styles.textLink} href="https://github.com/tmoreton/nappio/issues/new">Report an issue <span>↗</span></a>
+            </div>
+          </section>
         </main>
 
         <footer className={styles.footer}>
           <div className={styles.brand}><BrandMark /><span>Nappio</span></div>
           <p>Nappio is not a medical device and is not a substitute for adult supervision.</p>
-          <span>© 2026 Nappio</span>
+          <span><a href="#privacy-policy">Privacy</a> · <a href="#support">Support</a><br />© 2026 Nappio</span>
         </footer>
       </div>
     </>

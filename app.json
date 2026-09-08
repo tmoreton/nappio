@@ -14,10 +14,7 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
-        ],
-        "NSAppTransportSecurity": {
-          "NSAllowsLocalNetworking": true
-        }
+        ]
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -39,7 +36,6 @@
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.INTERNET",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.WAKE_LOCK",
         "android.permission.BLUETOOTH"
       ]
@@ -51,6 +47,8 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
+      "expo-secure-store",
+      "expo-notifications",
       [
         "expo-camera",
         {

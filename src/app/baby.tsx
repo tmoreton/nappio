@@ -1,6 +1,7 @@
 import { Camera } from 'expo-camera';
+import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,18 +11,21 @@ import { PairingCode } from '@/components/pairing-code';
 import { palette, radii, spacing } from '@/constants/design';
 import { BabyRoom } from '@/livekit/baby-room';
 import { useMonitoringKeepAwake } from '@/livekit/use-monitoring-keep-awake';
-import { createPairing } from '@/pairing/api';
+import { createPairing, PairingApiError, resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
+import { hasFreshAccessToken } from '@/state/session-lifecycle';
 import type { MonitorStatus } from '@/types/monitor';
 
 export default function BabyScreen() {
   useMonitoringKeepAwake();
-  const { session, setSession, clearSession } = useMonitorSession();
+  const { session, isHydrated, setSession, clearSession } = useMonitorSession();
   const [status, setStatus] = useState<MonitorStatus>('requesting-permissions');
   const [parentConnected, setParentConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dimmed, setDimmed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [isPrepared, setIsPrepared] = useState(false);
+  const createRequestId = useRef(Crypto.randomUUID());
   const babySession = session?.role === 'baby' ? session : null;
 
   const handleRoomError = useCallback((message: string) => {
@@ -30,8 +34,8 @@ export default function BabyScreen() {
   }, []);
 
   useEffect(() => {
+    if (!isHydrated || isPrepared) return;
     let cancelled = false;
-    clearSession();
 
     async function prepare() {
       if (Platform.OS !== 'web') {
@@ -43,17 +47,42 @@ export default function BabyScreen() {
       }
       if (cancelled) return;
       setStatus('connecting');
-      const pairing = await createPairing();
+
+      const savedSession = session?.role === 'baby' ? session : null;
+      if (session && !savedSession) clearSession();
+      if (savedSession && hasFreshAccessToken(savedSession)) {
+        setIsPrepared(true);
+        return;
+      }
+      if (savedSession) {
+        try {
+          const recovered = await resumeSession(savedSession.recoveryToken);
+          if (cancelled) return;
+          if (recovered.role !== 'baby') throw new Error('The saved session belongs to the Parent Unit.');
+          setSession(recovered);
+          setIsPrepared(true);
+          return;
+        } catch (reason) {
+          if (reason instanceof PairingApiError && reason.status === 410) clearSession();
+          throw reason;
+        }
+      }
+
+      const pairing = await createPairing(createRequestId.current);
       if (cancelled) return;
       setSession({
         role: 'baby',
         roomId: pairing.roomId,
         token: pairing.babyToken,
+        tokenExpiresAt: pairing.tokenExpiresAt,
         livekitUrl: pairing.livekitUrl,
         encryptionKey: pairing.encryptionKey,
         expiresAt: pairing.expiresAt,
+        sessionExpiresAt: pairing.sessionExpiresAt,
+        recoveryToken: pairing.babyRecoveryToken,
         pairingCode: pairing.pairingCode,
       });
+      setIsPrepared(true);
     }
 
     prepare().catch((reason: unknown) => {
@@ -65,14 +94,14 @@ export default function BabyScreen() {
     return () => {
       cancelled = true;
     };
-  }, [attempt, clearSession, setSession]);
+  }, [attempt, clearSession, isHydrated, isPrepared, session, setSession]);
 
   function stopMonitoring() {
     clearSession();
     router.replace('/');
   }
 
-  if (error || !babySession) {
+  if (error || !isPrepared || !babySession) {
     return (
       <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={styles.setupSafe}>
         <View style={styles.setupHeader}>
@@ -99,6 +128,7 @@ export default function BabyScreen() {
                 label="Try Again"
                 onPress={() => {
                   setError(null);
+                  setIsPrepared(false);
                   setStatus('requesting-permissions');
                   setAttempt((value) => value + 1);
                 }}

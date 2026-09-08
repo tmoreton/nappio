@@ -22,9 +22,13 @@ The public landing page is implemented as the web-specific home route. A GitHub 
 - automatic audio-only mode when the Parent app backgrounds
 - iOS background-audio capability and native audio-route picker
 - connected, reconnecting, disconnected, unavailable, and failure states
+- optional local interruption alerts when a previously live connection drops in the background
+- 24-hour role-scoped session recovery protected by iOS Keychain or Android Keystore
 - request size limits, no-store responses, and per-address pairing rate limits
 - a public HTTPS pairing API backed by a SQLite Durable Object
-- automated pairing-store and API tests
+- automatic expiry cleanup using Durable Object alarms
+- local server tests and Cloudflare-runtime integration tests
+- public privacy/support information and scheduled production health checks
 
 ## Requirements
 
@@ -57,14 +61,13 @@ The configured project URL is:
 wss://nappio-9a8qy0x7.livekit.cloud
 ```
 
-Create the app environment file using the computer's current LAN address so both phones can reach it:
+Create the app environment file. For physical devices, use the deployed HTTPS pairing service:
 
 ```sh
 cp .env.example .env
-ipconfig getifaddr en0
 ```
 
-Set `EXPO_PUBLIC_API_BASE_URL` to `http://<LAN-IP>:8787`. The phones and computer must be on the same local network. Use a deployed HTTPS pairing server before testing across networks or sharing the app outside your trusted LAN.
+Set `EXPO_PUBLIC_API_BASE_URL` to `https://nappio-pairing-api.tmoreton89.workers.dev`. The local TypeScript server remains useful for API development and automated tests, but release and physical-device builds should use HTTPS.
 
 ## Production pairing API
 
@@ -74,7 +77,7 @@ The TestFlight production environment uses:
 https://nappio-pairing-api.tmoreton89.workers.dev
 ```
 
-The Worker stores expiring, single-use pairing records and distributed rate limits in a SQLite-backed Cloudflare Durable Object. LiveKit credentials are encrypted Worker secrets and are never compiled into the mobile app.
+The Worker stores expiring, single-use pairing records, hashed session-recovery credentials, and distributed rate limits in a SQLite-backed Cloudflare Durable Object. LiveKit credentials are encrypted Worker secrets and are never compiled into the mobile app. Pairing codes expire in five minutes and resumable session records expire within 24 hours.
 
 For local Worker development, copy the existing ignored server environment file and start Wrangler:
 
@@ -126,7 +129,7 @@ Run the full repeatable local verification suite:
 ```sh
 npm run check
 npx expo-doctor
-npx expo export --platform web
+EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
 ```
 
 ## Two-phone test checklist
@@ -138,10 +141,12 @@ npx expo export --platform web
 5. Confirm live video and audio reach the Parent Unit.
 6. Tap **Audio Only** and verify network video reception stops in the LiveKit session view.
 7. Lock the Parent iPhone and listen continuously for at least 30 minutes.
-8. Unlock it, tap **Show Video**, and verify video returns.
-9. Briefly enable airplane mode, then disable it and verify **Reconnecting** returns to **Monitoring live**.
-10. Repeat with Wi-Fi/cellular transitions and Bluetooth connect/disconnect.
-11. End monitoring from each role and verify the camera, microphone, and audio session release.
+8. With interruption alerts enabled, disconnect the Baby Unit while the Parent phone is locked and verify the warning appears.
+9. Unlock it, tap **Show Video**, and verify video returns.
+10. Briefly enable airplane mode, then disable it and verify **Reconnecting** returns to **Monitoring live**.
+11. Force-quit and reopen each role, then use **Continue** and verify the same session reconnects.
+12. Repeat with Wi-Fi/cellular transitions and Bluetooth connect/disconnect.
+13. End monitoring from each role and verify the camera, microphone, audio session, and saved Continue action release.
 
 ## Security notes
 
@@ -149,7 +154,16 @@ npx expo export --platform web
 - Baby tokens can publish only camera/microphone and cannot subscribe.
 - Parent tokens can subscribe and cannot publish.
 - Pairing codes are single-use and expire after five minutes.
+- Role-specific recovery tokens are stored only as SHA-256 hashes by the Worker and expire within 24 hours.
 - E2EE keys are randomly generated per monitoring session and sent only by the pairing API.
 - The local server stores pairing records only in memory; restarting it clears them.
 - The production Worker stores pairing records and rate limits in one SQLite-backed Durable Object so create and claim operations remain atomic across Worker instances.
+- LiveKit token creation completes before a code is claimed, so a transient signing failure does not consume the code.
 - The public health endpoint reports storage and LiveKit configuration without exposing credentials.
+
+## Launch material
+
+- [Launch checklist](docs/launch-checklist.md)
+- [App Store metadata draft](docs/app-store-metadata.md)
+- Privacy policy: [tmoreton.github.io/nappio/#privacy-policy](https://tmoreton.github.io/nappio/#privacy-policy)
+- Support: [tmoreton.github.io/nappio/#support](https://tmoreton.github.io/nappio/#support)
