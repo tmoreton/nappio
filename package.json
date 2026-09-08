@@ -63,7 +63,8 @@
     "test": "npm run test:server && npm run test:worker",
     "test:server": "tsx --test server/test/**/*.test.ts",
     "test:worker": "npm --prefix worker test",
-    "check": "npm run lint && npm run typecheck && npm test"
+    "verify:expo-config": "node scripts/verify-expo-config.mjs",
+    "check": "npm run lint && npm run typecheck && npm run verify:expo-config && npm test"
   },
   "private": true
 }

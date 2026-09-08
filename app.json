@@ -48,6 +48,7 @@
       "expo-router",
       "expo-dev-client",
       "expo-secure-store",
+      "./plugins/with-local-notifications-only",
       "expo-notifications",
       [
         "expo-camera",
