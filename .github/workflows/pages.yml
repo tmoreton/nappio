@@ -29,6 +29,8 @@ jobs:
         run: npm ci
       - name: Export static website
         run: npx expo export --platform web
+        env:
+          EXPO_WEB_BASE_URL: /nappio
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload website artifact
