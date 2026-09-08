@@ -7,6 +7,9 @@
 - [ ] `npm run check` passes lint, TypeScript, local API tests, and Cloudflare-runtime tests.
 - [ ] `npx expo-doctor` reports every project check passing.
 - [ ] `EXPO_WEB_BASE_URL=/nappio npx expo export --platform web` succeeds.
+- [ ] The GitHub repository has an `EXPO_TOKEN` Actions secret scoped to the Nappio Expo project.
+- [ ] A push to `main` completes the **Publish Nappio OTA update** workflow and publishes to the `production` channel.
+- [ ] A production build downloads a compatible update, applies it after reopening, and never rolls back to an older update.
 - [ ] The production pairing API health response reports storage and LiveKit configured.
 - [ ] GitHub Pages contains the current privacy and support sections.
 
@@ -18,6 +21,7 @@
 - [ ] Confirm Baby Unit camera and microphone indicators match active monitoring.
 - [ ] Confirm Parent Unit audio/video and Audio Only transitions.
 - [ ] Lock the Parent phone for at least 30 minutes and confirm uninterrupted audio.
+- [ ] With monitoring alerts enabled and the Parent phone locked, make sustained sound near the Baby Unit and confirm a single audible notification appears without repeated alerts for at least 60 seconds.
 - [ ] Disconnect the Baby Unit while the Parent phone is locked and confirm an interruption notification appears.
 - [ ] Move the Parent phone between Wi-Fi and cellular and confirm reconnection.
 - [ ] Disconnect and reconnect Bluetooth audio during monitoring.
@@ -43,3 +47,4 @@
 - [ ] Review Cloudflare Worker errors and LiveKit project usage before widening the beta.
 - [ ] Decide whether to add a crash-reporting provider. None is enabled, so no crash telemetry is collected today.
 - [ ] Keep a previously approved TestFlight build available until the replacement build has passed the physical-device checklist.
+- [ ] Ship a new store build whenever native dependencies, permissions, Expo SDK, runtime version, or app version change; OTA updates only cover compatible JavaScript and assets.

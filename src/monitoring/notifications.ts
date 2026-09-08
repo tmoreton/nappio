@@ -9,3 +9,5 @@ export async function requestMonitoringAlerts(): Promise<MonitoringAlertPermissi
 }
 
 export async function notifyMonitoringInterrupted(_reason: string): Promise<void> {}
+
+export async function notifySoundDetected(): Promise<void> {}

@@ -8,6 +8,7 @@ type ParentRoomProps = {
   audioOnly: boolean;
   onStatusChange: (status: MonitorStatus) => void;
   onBabyConnectedChange: (connected: boolean) => void;
+  onSoundDetected: () => void;
   onError: (message: string) => void;
 };
 

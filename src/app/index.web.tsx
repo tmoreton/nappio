@@ -209,7 +209,7 @@ export default function LandingPage() {
             <div className={styles.legalGrid}>
               <article>
                 <h3>Camera, microphone, and alerts</h3>
-                <p>The Baby Unit uses its camera and microphone only for live monitoring. Optional Parent Unit notifications warn when an active connection is interrupted.</p>
+                <p>The Baby Unit uses its camera and microphone only for live monitoring. Optional Parent Unit notifications report sustained sound or an interrupted connection while monitoring is active.</p>
               </article>
               <article>
                 <h3>Temporary pairing data</h3>

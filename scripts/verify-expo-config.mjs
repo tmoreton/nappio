@@ -13,6 +13,8 @@ if (result.status !== 0) {
 
 const config = JSON.parse(result.stdout);
 const entitlements = config._internal?.modResults?.ios?.entitlements ?? {};
+const backgroundModes = config.ios?.infoPlist?.UIBackgroundModes ?? [];
+const androidPermissions = config.android?.permissions ?? [];
 
 if (Object.hasOwn(entitlements, 'aps-environment')) {
   throw new Error(
@@ -20,4 +22,16 @@ if (Object.hasOwn(entitlements, 'aps-environment')) {
   );
 }
 
-console.log('Expo native config verified: local notifications do not request APNs.');
+if (new Set(backgroundModes).size !== backgroundModes.length) {
+  throw new Error('iOS background modes must not contain duplicates.');
+}
+
+if (new Set(androidPermissions).size !== androidPermissions.length) {
+  throw new Error('Android permissions must not contain duplicates.');
+}
+
+if (!config.updates?.url || !config.runtimeVersion) {
+  throw new Error('EAS Update requires updates.url and runtimeVersion in the Expo config.');
+}
+
+console.log('Expo native config verified: local notifications and EAS Update are configured.');

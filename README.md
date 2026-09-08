@@ -22,7 +22,7 @@ The public landing page is implemented as the web-specific home route. A GitHub 
 - automatic audio-only mode when the Parent app backgrounds
 - iOS background-audio capability and native audio-route picker
 - connected, reconnecting, disconnected, unavailable, and failure states
-- optional local interruption alerts when a previously live connection drops in the background
+- optional local alerts for sustained sound or a dropped connection while monitoring in the background
 - 24-hour role-scoped session recovery protected by iOS Keychain or Android Keystore
 - request size limits, no-store responses, and per-address pairing rate limits
 - a public HTTPS pairing API backed by a SQLite Durable Object
@@ -141,7 +141,7 @@ EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
 5. Confirm live video and audio reach the Parent Unit.
 6. Tap **Audio Only** and verify network video reception stops in the LiveKit session view.
 7. Lock the Parent iPhone and listen continuously for at least 30 minutes.
-8. With interruption alerts enabled, disconnect the Baby Unit while the Parent phone is locked and verify the warning appears.
+8. With monitoring alerts enabled, make sustained sound near the Baby Unit and verify the locked Parent phone receives a sound alert; then disconnect the Baby Unit and verify the interruption warning appears.
 9. Unlock it, tap **Show Video**, and verify video returns.
 10. Briefly enable airplane mode, then disable it and verify **Reconnecting** returns to **Monitoring live**.
 11. Force-quit and reopen each role, then use **Continue** and verify the same session reconnects.

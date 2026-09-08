@@ -75,7 +75,7 @@ function SetupVisual() {
 const assurances = [
   ['◇', 'Encrypted media', 'Audio and video are encrypted between the phones.'],
   ['♪', 'Audio-only mode', 'Keep listening while the Parent phone is locked.'],
-  ['!', 'Optional alerts', 'Choose whether to be warned if monitoring stops.'],
+  ['!', 'Optional alerts', 'Choose whether to be warned about sound or a lost connection.'],
 ] as const;
 
 function TrustVisual() {

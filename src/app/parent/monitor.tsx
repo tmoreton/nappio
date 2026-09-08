@@ -12,6 +12,7 @@ import { ParentRoom } from '@/livekit/parent-room';
 import {
   getMonitoringAlertPermission,
   notifyMonitoringInterrupted,
+  notifySoundDetected,
   requestMonitoringAlerts,
   type MonitoringAlertPermission,
 } from '@/monitoring/notifications';
@@ -48,7 +49,11 @@ export default function MonitorScreen() {
       !interruptionAlertSent.current
     ) {
       interruptionAlertSent.current = true;
-      void notifyMonitoringInterrupted('The connection to the Baby Unit was interrupted. Open Nappio to reconnect.');
+      void notifyMonitoringInterrupted(
+        'The connection to the Baby Unit was interrupted. Open Nappio to reconnect.',
+      ).catch((notificationError: unknown) => {
+        console.warn('Could not show the monitoring interruption alert.', notificationError);
+      });
     }
   }, []);
 
@@ -57,7 +62,11 @@ export default function MonitorScreen() {
     setError(message);
     if (connectedOnce.current && appState.current !== 'active' && !interruptionAlertSent.current) {
       interruptionAlertSent.current = true;
-      void notifyMonitoringInterrupted('The connection to the Baby Unit was interrupted. Open Nappio to reconnect.');
+      void notifyMonitoringInterrupted(
+        'The connection to the Baby Unit was interrupted. Open Nappio to reconnect.',
+      ).catch((notificationError: unknown) => {
+        console.warn('Could not show the monitoring interruption alert.', notificationError);
+      });
     }
   }, []);
 
@@ -68,9 +77,20 @@ export default function MonitorScreen() {
       interruptionAlertSent.current = false;
     } else if (babySeen.current && appState.current !== 'active' && !interruptionAlertSent.current) {
       interruptionAlertSent.current = true;
-      void notifyMonitoringInterrupted('The Baby Unit left the monitoring room. Open Nappio to check it.');
+      void notifyMonitoringInterrupted(
+        'The Baby Unit left the monitoring room. Open Nappio to check it.',
+      ).catch((notificationError: unknown) => {
+        console.warn('Could not show the monitoring interruption alert.', notificationError);
+      });
     }
   }, []);
+
+  const handleSoundDetected = useCallback(() => {
+    if (appState.current === 'active' || alertPermission !== 'granted') return;
+    void notifySoundDetected().catch((notificationError: unknown) => {
+      console.warn('Could not show the sound alert.', notificationError);
+    });
+  }, [alertPermission]);
 
   useEffect(() => {
     if (!isHydrated || isPrepared) return;
@@ -180,6 +200,7 @@ export default function MonitorScreen() {
         audioOnly={audioOnly}
         onStatusChange={handleStatusChange}
         onBabyConnectedChange={handleBabyConnectedChange}
+        onSoundDetected={handleSoundDetected}
         onError={handleRoomError}
       />
 
@@ -192,22 +213,27 @@ export default function MonitorScreen() {
         </View>
 
         <View style={styles.bottomArea}>
-          {alertPermission !== 'granted' ? (
+          {alertPermission === 'granted' ? (
+            <View style={styles.alertsEnabled}>
+              <View style={styles.alertsEnabledDot} />
+              <Text style={styles.alertsEnabledText}>Sound and connection alerts on</Text>
+            </View>
+          ) : (
             <Pressable
               accessibilityRole="button"
               onPress={() => void enableAlerts()}
               style={({ pressed }) => [styles.alertsCard, pressed && styles.pressed]}>
               <View style={styles.alertsCopy}>
-                <Text style={styles.alertsTitle}>Turn on interruption alerts</Text>
+                <Text style={styles.alertsTitle}>Turn on monitoring alerts</Text>
                 <Text style={styles.alertsDetail}>
                   {alertPermission === 'denied'
-                    ? 'Enable notifications in Settings to be warned if monitoring stops.'
-                    : 'Get a notification if the Baby Unit disconnects while this screen is inactive.'}
+                    ? 'Enable notification sounds in Settings to receive monitoring alerts.'
+                    : 'Get alerts for sustained sound or a lost connection while this screen is inactive.'}
                 </Text>
               </View>
               <Text style={styles.alertsAction}>{alertPermission === 'denied' ? 'Settings' : 'Enable'}</Text>
             </Pressable>
-          ) : null}
+          )}
           {error ? (
             <View style={styles.errorCard}>
               <Text style={styles.errorTitle}>Monitoring interrupted</Text>
@@ -279,6 +305,18 @@ const styles = StyleSheet.create({
   alertsTitle: { color: palette.ink, fontSize: 13, fontWeight: '800' },
   alertsDetail: { color: palette.muted, fontSize: 11, lineHeight: 16, marginTop: 2 },
   alertsAction: { color: palette.yellow, fontSize: 12, fontWeight: '800' },
+  alertsEnabled: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(230,238,232,0.94)',
+    borderRadius: radii.pill,
+    flexDirection: 'row',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  alertsEnabledDot: { backgroundColor: palette.sageDark, borderRadius: 4, height: 8, width: 8 },
+  alertsEnabledText: { color: palette.sageDark, fontSize: 11, fontWeight: '800' },
   errorCard: { backgroundColor: palette.redWash, borderRadius: radii.md, padding: spacing.md },
   errorTitle: { color: palette.red, fontSize: 14, fontWeight: '800' },
   errorCopy: { color: palette.red, fontSize: 12, lineHeight: 17, marginTop: 3 },

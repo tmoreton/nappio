@@ -9,12 +9,16 @@ import {
   VideoTrack,
 } from '@livekit/react-native';
 import { RemoteTrackPublication, Room, RoomEvent, Track } from 'livekit-client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { palette, spacing } from '@/constants/design';
 import { startMonitoringAudioSession, stopMonitoringAudioSession } from '@/livekit/audio-session';
 import { connectionStateToMonitorStatus } from '@/livekit/connection-state';
+import {
+  advanceSoundAlertDetector,
+  createSoundAlertDetectorState,
+} from '@/monitoring/sound-alert-detector';
 import type { MonitorSession, MonitorStatus } from '@/types/monitor';
 
 type ParentRoomProps = {
@@ -22,6 +26,7 @@ type ParentRoomProps = {
   audioOnly: boolean;
   onStatusChange: (status: MonitorStatus) => void;
   onBabyConnectedChange: (connected: boolean) => void;
+  onSoundDetected: () => void;
   onError: (message: string) => void;
 };
 
@@ -30,6 +35,7 @@ export function ParentRoom({
   audioOnly,
   onStatusChange,
   onBabyConnectedChange,
+  onSoundDetected,
   onError,
 }: ParentRoomProps) {
   const { e2eeManager } = useRNE2EEManager({ sharedKey: session.encryptionKey });
@@ -76,6 +82,7 @@ export function ParentRoom({
       <ParentRoomContent
         audioOnly={audioOnly}
         onBabyConnectedChange={onBabyConnectedChange}
+        onSoundDetected={onSoundDetected}
         onStatusChange={onStatusChange}
       />
     </LiveKitRoom>
@@ -85,8 +92,12 @@ export function ParentRoom({
 function ParentRoomContent({
   audioOnly,
   onBabyConnectedChange,
+  onSoundDetected,
   onStatusChange,
-}: Pick<ParentRoomProps, 'audioOnly' | 'onBabyConnectedChange' | 'onStatusChange'>) {
+}: Pick<
+  ParentRoomProps,
+  'audioOnly' | 'onBabyConnectedChange' | 'onSoundDetected' | 'onStatusChange'
+>) {
   const room = useRoomContext();
   const connectionState = useConnectionState();
   const participants = useRemoteParticipants();
@@ -99,6 +110,7 @@ function ParentRoomContent({
     (track) => !track.participant.isLocal && track.participant.attributes.role === 'baby',
   );
   const volume = useTrackVolume(babyAudio);
+  const soundAlertState = useRef(createSoundAlertDetectorState());
 
   useEffect(() => {
     onStatusChange(connectionStateToMonitorStatus(connectionState));
@@ -109,6 +121,16 @@ function ParentRoomContent({
       participants.some((participant) => participant.attributes.role === 'baby'),
     );
   }, [onBabyConnectedChange, participants]);
+
+  useEffect(() => {
+    const result = advanceSoundAlertDetector(
+      soundAlertState.current,
+      babyAudio ? volume : 0,
+      Date.now(),
+    );
+    soundAlertState.current = result.state;
+    if (result.shouldNotify) onSoundDetected();
+  }, [babyAudio, onSoundDetected, volume]);
 
   useEffect(() => {
     const setCameraSubscription = (publication: RemoteTrackPublication) => {

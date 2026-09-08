@@ -90,6 +90,14 @@
         "projectId": "42fc7a59-d943-47c5-95c6-fda69548b47e"
       }
     },
-    "owner": "reactnativenerd"
+    "owner": "reactnativenerd",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/42fc7a59-d943-47c5-95c6-fda69548b47e",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }

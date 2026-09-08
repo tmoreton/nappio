@@ -26,7 +26,7 @@ Nappio includes:
 - End-to-end encrypted media
 - Single-use pairing codes that expire after five minutes
 - Audio-only monitoring designed for a locked Parent phone
-- Optional alerts when an active connection is interrupted
+- Optional alerts for sustained sound or an interrupted connection
 - Secure session recovery after reopening the app
 - No account and no built-in recording
 
@@ -44,7 +44,7 @@ Nappio requires two physical iPhones for its primary flow and does not require a
 2. Leave the pairing code visible.
 3. On the second iPhone, tap **Monitor Baby** and enter the six-digit code or scan the QR code.
 4. Confirm live video and audio, then select **Audio Only**.
-5. Notification permission is optional and is requested only when the reviewer taps the interruption-alert prompt on the Parent Unit.
+5. Notification permission is optional and is requested only when the reviewer taps the monitoring-alert prompt on the Parent Unit.
 
 The pairing code expires after five minutes and can be used only once. If it expires, end the Baby Unit session and start it again. There are no paid features, credentials, hidden menus, or external hardware requirements.
 

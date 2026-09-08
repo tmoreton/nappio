@@ -7,7 +7,7 @@ import { palette, radii, spacing, type } from '@/constants/design';
 const troubleshooting = [
   'Keep both phones online and leave the Baby Unit connected to power for long sessions.',
   'If a code expires, end the Baby Unit session and start it again for a new code.',
-  'Allow camera and microphone access on the Baby Unit. Allow notifications on the Parent Unit for interruption alerts.',
+  'Allow camera and microphone access on the Baby Unit. Allow notifications and notification sounds on the Parent Unit for sound and interruption alerts.',
   'If audio stops after locking the Parent phone, reopen Nappio and confirm that Monitoring live is visible before locking again.',
 ];
 

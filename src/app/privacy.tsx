@@ -9,7 +9,7 @@ const POLICY_URL = 'https://tmoreton.github.io/nappio/#privacy-policy';
 const sections = [
   {
     title: 'What Nappio handles',
-    body: 'Nappio uses the Baby Unit camera and microphone only to provide live monitoring. It does not create user accounts, build advertising profiles, or provide recording. Optional notifications are used only to warn the Parent Unit when an active connection is interrupted.',
+    body: 'Nappio uses the Baby Unit camera and microphone only to provide live monitoring. It does not create user accounts, build advertising profiles, or provide recording. Optional notifications report sustained sound or an interrupted connection while monitoring is active.',
   },
   {
     title: 'Pairing and session data',
