@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "nappio-pairing-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "LIVEKIT_URL": "wss://nappio-9a8qy0x7.livekit.cloud",
+    "PAIRING_TTL_SECONDS": "300",
+    "TOKEN_TTL_SECONDS": "21600"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PAIRINGS",
+        "class_name": "PairingCoordinator"
+      }
+    ]
+  },
+  "exports": {
+    "PairingCoordinator": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  }
+}
