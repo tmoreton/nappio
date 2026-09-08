@@ -10,6 +10,8 @@ import { normalizePairingCode, pairingCodeFromQr } from '@/pairing/code';
 import { joinPairing } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
 
+const HEADER_SCREEN_EDGES = ['bottom', 'left', 'right'] as const;
+
 export default function PairScreen() {
   const params = useLocalSearchParams<{ code?: string | string[] }>();
   const { setSession } = useMonitorSession();
@@ -19,6 +21,7 @@ export default function PairScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const inputRef = useRef<TextInput>(null);
   const submitting = useRef(false);
 
   async function joinWithCode(value: string) {
@@ -87,23 +90,41 @@ export default function PairScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={88}
-      style={styles.flex}>
-      <Screen contentStyle={styles.content} scroll>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+      <Screen contentStyle={styles.content} edges={HEADER_SCREEN_EDGES} scroll>
         <View style={styles.intro}>
           <Text style={styles.eyebrow}>CONNECT PRIVATELY</Text>
-          <Text style={styles.title}>Enter the code shown on the baby camera.</Text>
-          <Text style={styles.copy}>Codes expire after five minutes and work only once.</Text>
+          <Text style={styles.title}>Choose how to connect</Text>
+          <Text style={styles.copy}>Use the one-time code or QR code shown on the baby camera.</Text>
+        </View>
+
+        <View accessibilityRole="tablist" style={styles.methodPicker}>
+          <Pressable
+            accessibilityLabel="Enter a six-digit code"
+            accessibilityRole="tab"
+            accessibilityState={{ selected: true }}
+            onPress={() => inputRef.current?.focus()}
+            style={({ pressed }) => [styles.method, styles.methodActive, pressed && styles.pressed]}>
+            <Text style={[styles.methodLabel, styles.methodLabelActive]}>Enter code</Text>
+            <Text style={[styles.methodDetail, styles.methodDetailActive]}>6 digits</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Scan a pairing QR code"
+            accessibilityRole="tab"
+            accessibilityState={{ selected: false }}
+            onPress={() => void openScanner()}
+            style={({ pressed }) => [styles.method, pressed && styles.pressed]}>
+            <Text style={styles.methodLabel}>Scan QR</Text>
+            <Text style={styles.methodDetail}>Use camera</Text>
+          </Pressable>
         </View>
 
         <View style={styles.codeCard}>
           <Text style={styles.label}>SIX-DIGIT CODE</Text>
           <TextInput
+            ref={inputRef}
             accessibilityLabel="Six-digit pairing code"
             autoComplete="one-time-code"
-            autoFocus
             inputMode="numeric"
             keyboardType="number-pad"
             maxLength={6}
@@ -129,13 +150,6 @@ export default function PairScreen() {
             disabled={code.length !== 6 || isSubmitting}
             onPress={() => void joinWithCode(code)}
           />
-          <ActionButton
-            label="Scan QR Code"
-            detail="Use this phone’s camera to connect"
-            icon="camera"
-            variant="secondary"
-            onPress={() => void openScanner()}
-          />
         </View>
       </Screen>
     </KeyboardAvoidingView>
@@ -144,35 +158,58 @@ export default function PairScreen() {
 
 const styles = StyleSheet.create({
   flex: { backgroundColor: palette.canvas, flex: 1 },
-  content: { paddingBottom: spacing.xl, paddingTop: spacing.lg },
-  intro: { gap: spacing.sm, marginBottom: spacing.xl, marginTop: spacing.md },
+  content: { paddingBottom: spacing.lg, paddingTop: 12 },
+  intro: { gap: 6, marginBottom: 20 },
   eyebrow: { color: palette.sageDark, fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
   title: {
     color: palette.ink,
     fontFamily: type.serif,
-    fontSize: 38,
+    fontSize: 32,
     fontWeight: '700',
-    letterSpacing: -1.2,
-    lineHeight: 43,
+    letterSpacing: -0.8,
+    lineHeight: 37,
   },
   copy: { color: palette.muted, fontSize: 15, lineHeight: 22 },
+  methodPicker: {
+    backgroundColor: palette.paper,
+    borderColor: palette.line,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 12,
+    padding: 6,
+  },
+  method: {
+    borderRadius: 13,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: 12,
+  },
+  methodActive: { backgroundColor: palette.ink },
+  methodLabel: { color: palette.ink, fontSize: 15, fontWeight: '800' },
+  methodLabelActive: { color: palette.white },
+  methodDetail: { color: palette.muted, fontSize: 12, marginTop: 2 },
+  methodDetailActive: { color: palette.sageWash },
+  pressed: { opacity: 0.76 },
   codeCard: {
     backgroundColor: palette.paper,
     borderColor: palette.line,
     borderRadius: radii.lg,
     borderWidth: 1,
-    marginBottom: spacing.lg,
-    padding: spacing.lg,
+    marginBottom: 12,
+    padding: 20,
   },
   label: { color: palette.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   input: {
     color: palette.ink,
     fontFamily: type.mono,
-    fontSize: 42,
+    fontSize: 38,
     fontWeight: '800',
-    letterSpacing: 11,
-    marginTop: spacing.sm,
-    minHeight: 62,
+    letterSpacing: 9,
+    marginTop: 4,
+    minHeight: 56,
   },
   error: { color: palette.red, fontSize: 13, lineHeight: 18, marginTop: spacing.sm },
   actions: { gap: spacing.sm },
