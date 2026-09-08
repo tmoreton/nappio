@@ -30,7 +30,7 @@ function WelcomeVisual() {
     <View style={[styles.visual, styles.welcomeVisual]} accessibilityElementsHidden>
       <Image
         contentFit="contain"
-        source={require('../../assets/images/icon.png')}
+        source={require('../../assets/images/splash-icon.png')}
         style={styles.appIcon}
       />
       <View style={styles.privatePill}>
@@ -218,18 +218,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: '100%',
   },
-  welcomeVisual: { backgroundColor: palette.paper, borderColor: palette.line, borderWidth: 1 },
-  appIcon: { height: 210, marginTop: -18, width: 210 },
+  welcomeVisual: {
+    backgroundColor: palette.paper,
+    borderColor: palette.line,
+    borderWidth: 1,
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  appIcon: { height: 166, width: 166 },
   privatePill: {
     alignItems: 'center',
     backgroundColor: palette.sageWash,
     borderRadius: radii.pill,
-    bottom: spacing.lg,
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: 13,
     paddingVertical: 9,
-    position: 'absolute',
   },
   privateDot: { backgroundColor: palette.sageDark, borderRadius: 4, height: 8, width: 8 },
   privateText: { color: palette.sageDark, fontSize: 12, fontWeight: '800' },
