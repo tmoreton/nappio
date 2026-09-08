@@ -1,5 +1,5 @@
-import { router, type Href } from 'expo-router';
-import { useState } from 'react';
+import { Redirect, router, type Href } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
@@ -7,10 +7,27 @@ import { Screen } from '@/components/screen';
 import { palette, radii, spacing, type } from '@/constants/design';
 import { resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
+import { hasCompletedOnboarding } from '@/state/onboarding-storage';
 
 export default function HomeScreen() {
   const { session, isHydrated, setSession, clearSession } = useMonitorSession();
   const [isResuming, setIsResuming] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    hasCompletedOnboarding()
+      .then((complete) => {
+        if (!cancelled) setOnboardingComplete(complete);
+      })
+      .catch((error: unknown) => {
+        console.warn('Could not check onboarding status.', error);
+        if (!cancelled) setOnboardingComplete(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function continueMonitoring() {
     if (!session || isResuming) return;
@@ -38,6 +55,14 @@ export default function HomeScreen() {
   function startParentMonitor() {
     clearSession();
     router.push('/parent/pair');
+  }
+
+  if (onboardingComplete === null) {
+    return <View style={styles.loading} />;
+  }
+
+  if (!onboardingComplete) {
+    return <Redirect href={'/onboarding' as Href} />;
   }
 
   return (
@@ -102,6 +127,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  loading: { backgroundColor: palette.canvas, flex: 1 },
   content: {
     justifyContent: 'space-between',
     paddingTop: spacing.xl,

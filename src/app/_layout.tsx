@@ -21,6 +21,10 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: palette.canvas },
           }}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="onboarding"
+            options={{ gestureEnabled: false, headerShown: false }}
+          />
           <Stack.Screen name="baby" options={{ headerShown: false }} />
           <Stack.Screen name="parent/pair" options={{ title: 'Pair a camera' }} />
           <Stack.Screen name="privacy" options={{ title: 'Privacy' }} />

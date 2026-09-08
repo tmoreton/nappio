@@ -12,6 +12,8 @@
 
 ## Required physical two-iPhone verification
 
+- [ ] On a fresh install, confirm onboarding appears once; complete or skip it, relaunch, and confirm the role chooser opens directly.
+- [ ] Replay the welcome guide from Help & support and confirm Back, Continue, and Choose a role all work.
 - [ ] Pair by typed code and by QR code.
 - [ ] Confirm Baby Unit camera and microphone indicators match active monitoring.
 - [ ] Confirm Parent Unit audio/video and Audio Only transitions.

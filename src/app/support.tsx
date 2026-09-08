@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { router, Stack, type Href } from 'expo-router';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
@@ -33,6 +33,12 @@ export default function SupportScreen() {
           Nappio is not a medical device. Always use direct adult supervision and never rely on a phone connection as the only safety measure.
         </Text>
         <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/onboarding' as Href)}
+            style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
+            <Text style={styles.secondaryText}>View the welcome guide</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="link"
             onPress={() => void Linking.openURL('mailto:tmoreton89@gmail.com?subject=Nappio%20support')}
