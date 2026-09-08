@@ -4,7 +4,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
 import { Screen } from '@/components/screen';
-import { palette, radii, spacing, type } from '@/constants/design';
+import { palette, spacing, type } from '@/constants/design';
 import { resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
 import { hasCompletedOnboarding } from '@/state/onboarding-storage';
@@ -75,42 +75,47 @@ export default function HomeScreen() {
         <Text style={styles.wordmark}>Nappio</Text>
       </View>
 
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>A PRIVATE LINK BETWEEN TWO PHONES</Text>
-        <Text style={styles.title}>Rest easy. Stay close.</Text>
-        <Text style={styles.subtitle}>
-          Turn one phone into a secure baby camera and use the other to listen and watch.
-        </Text>
-      </View>
+      <View style={styles.main}>
+        <View style={styles.hero}>
+          <Text style={styles.title}>Choose a role.</Text>
+          <Text style={styles.subtitle}>How would you like to use this phone?</Text>
+        </View>
 
-      <View style={styles.actions}>
-        {isHydrated && session ? (
+        <View style={styles.actions}>
+          {isHydrated && session ? (
+            <ActionButton
+              compact
+              label={
+                isResuming
+                  ? 'Restoring…'
+                  : session.role === 'baby'
+                    ? 'Resume baby camera'
+                    : 'Resume monitoring'
+              }
+              icon={session.role === 'baby' ? 'camera' : 'monitor'}
+              disabled={isResuming}
+              onPress={() => void continueMonitoring()}
+            />
+          ) : null}
           <ActionButton
-            label={isResuming ? 'Restoring…' : session.role === 'baby' ? 'Continue Baby Camera' : 'Continue Monitoring'}
-            detail="Resume the last private session"
-            icon={session.role === 'baby' ? 'camera' : 'monitor'}
-            disabled={isResuming}
-            onPress={() => void continueMonitoring()}
+            compact
+            label="Baby camera"
+            icon="camera"
+            onPress={startBabyCamera}
           />
-        ) : null}
-        <ActionButton
-          label="Use as Baby Camera"
-          detail="Share this phone’s camera and microphone"
-          icon="camera"
-          onPress={startBabyCamera}
-        />
-        <ActionButton
-          label="Monitor Baby"
-          detail="Connect with a code or scan a QR code"
-          icon="monitor"
-          variant="secondary"
-          onPress={startParentMonitor}
-        />
-      </View>
+          <ActionButton
+            compact
+            label="Parent monitor"
+            icon="monitor"
+            variant="secondary"
+            onPress={startParentMonitor}
+          />
+        </View>
 
-      <View style={styles.privacy}>
-        <View style={styles.privacyDot} />
-        <Text style={styles.privacyText}>No recording or playback history is built into Nappio.</Text>
+        <View style={styles.privacy}>
+          <View style={styles.privacyDot} />
+          <Text style={styles.privacyText}>Private connection · Nothing is recorded</Text>
+        </View>
       </View>
 
       <View style={styles.footer}>
@@ -129,9 +134,8 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   loading: { backgroundColor: palette.canvas, flex: 1 },
   content: {
-    justifyContent: 'space-between',
-    paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
+    paddingTop: spacing.md,
   },
   brand: {
     alignItems: 'center',
@@ -141,72 +145,62 @@ const styles = StyleSheet.create({
   mark: {
     backgroundColor: palette.ink,
     borderRadius: 14,
-    height: 40,
+    height: 36,
     overflow: 'hidden',
-    width: 40,
+    width: 36,
   },
   markMoon: {
     backgroundColor: palette.canvas,
-    borderRadius: 14,
-    height: 25,
-    left: 11,
+    borderRadius: 13,
+    height: 23,
+    left: 10,
     position: 'absolute',
-    top: 5,
-    width: 25,
+    top: 4,
+    width: 23,
   },
   markStar: {
     backgroundColor: palette.peach,
     borderRadius: 3,
     height: 6,
-    left: 8,
+    left: 7,
     position: 'absolute',
-    top: 25,
+    top: 23,
     transform: [{ rotate: '45deg' }],
     width: 6,
   },
   wordmark: {
     color: palette.ink,
-    fontSize: 25,
+    fontSize: 23,
     fontWeight: '800',
     letterSpacing: -0.8,
   },
-  hero: {
-    gap: spacing.md,
-    marginVertical: spacing.xxl,
-  },
-  eyebrow: {
-    color: palette.sageDark,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-  },
+  main: { marginTop: spacing.xxl },
+  hero: { gap: spacing.sm },
   title: {
     color: palette.ink,
     fontFamily: type.serif,
-    fontSize: 54,
+    fontSize: 44,
     fontWeight: '700',
-    letterSpacing: -2.1,
-    lineHeight: 58,
+    letterSpacing: -1.5,
+    lineHeight: 48,
     maxWidth: 460,
   },
   subtitle: {
     color: palette.muted,
-    fontSize: 18,
-    lineHeight: 27,
+    fontSize: 15,
+    lineHeight: 22,
     maxWidth: 520,
   },
   actions: {
-    gap: spacing.md,
+    gap: 12,
+    marginTop: spacing.xl,
   },
   privacy: {
     alignItems: 'center',
-    backgroundColor: palette.sageWash,
-    borderRadius: radii.md,
     flexDirection: 'row',
     gap: spacing.sm,
+    justifyContent: 'center',
     marginTop: spacing.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 13,
   },
   privacyDot: {
     backgroundColor: palette.sageDark,
@@ -216,17 +210,17 @@ const styles = StyleSheet.create({
   },
   privacyText: {
     color: palette.sageDark,
-    flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    lineHeight: 18,
+    lineHeight: 17,
   },
   footer: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
     justifyContent: 'center',
-    marginTop: spacing.md,
+    marginTop: 'auto',
+    paddingTop: spacing.xxl,
     paddingBottom: spacing.sm,
   },
   footerLink: { color: palette.sageDark, fontSize: 12, fontWeight: '700' },
