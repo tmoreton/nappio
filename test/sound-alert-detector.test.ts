@@ -7,7 +7,7 @@ import {
   isSoundAlertSensitivity,
   soundAlertConfigForSensitivity,
   type SoundAlertDetectorConfig,
-} from '../../src/monitoring/sound-alert-detector';
+} from '../src/monitoring/sound-alert-detector';
 
 test('sound sensitivity presets become progressively easier to trigger', () => {
   const low = soundAlertConfigForSensitivity('low');

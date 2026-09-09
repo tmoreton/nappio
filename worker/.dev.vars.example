@@ -1,0 +1,6 @@
+# Generate a unique value with at least 32 characters, for example: openssl rand -base64 32
+SESSION_SECRET=
+
+# Optional locally. Without these, direct connections use Cloudflare's free STUN service only.
+TURN_KEY_ID=
+TURN_KEY_API_TOKEN=

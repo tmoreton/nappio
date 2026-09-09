@@ -16,28 +16,31 @@ export function encodeBabyDeviceStatus(status: BabyDeviceStatus): Uint8Array<Arr
 
 export function parseBabyDeviceStatus(payload: Uint8Array): BabyDeviceStatus | null {
   try {
-    const value: unknown = JSON.parse(new TextDecoder().decode(payload));
-    if (!value || typeof value !== 'object') return null;
-    const status = value as Partial<BabyDeviceStatus>;
-    if (
-      status.batteryLevel !== null &&
-      (typeof status.batteryLevel !== 'number' ||
-        !Number.isFinite(status.batteryLevel) ||
-        status.batteryLevel < 0 ||
-        status.batteryLevel > 1)
-    ) {
-      return null;
-    }
-    if (status.isCharging !== null && typeof status.isCharging !== 'boolean') return null;
-    if (typeof status.lowPowerMode !== 'boolean') return null;
-    return {
-      batteryLevel: status.batteryLevel,
-      isCharging: status.isCharging,
-      lowPowerMode: status.lowPowerMode,
-    };
+    return parseBabyDeviceStatusValue(JSON.parse(new TextDecoder().decode(payload)));
   } catch {
     return null;
   }
+}
+
+export function parseBabyDeviceStatusValue(value: unknown): BabyDeviceStatus | null {
+  if (!value || typeof value !== 'object') return null;
+  const status = value as Partial<BabyDeviceStatus>;
+  if (
+    status.batteryLevel !== null &&
+    (typeof status.batteryLevel !== 'number' ||
+      !Number.isFinite(status.batteryLevel) ||
+      status.batteryLevel < 0 ||
+      status.batteryLevel > 1)
+  ) {
+    return null;
+  }
+  if (status.isCharging !== null && typeof status.isCharging !== 'boolean') return null;
+  if (typeof status.lowPowerMode !== 'boolean') return null;
+  return {
+    batteryLevel: status.batteryLevel,
+    isCharging: status.isCharging,
+    lowPowerMode: status.lowPowerMode,
+  };
 }
 
 export function isBabyBatteryLow(status: BabyDeviceStatus): boolean {

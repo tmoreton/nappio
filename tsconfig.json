@@ -18,7 +18,7 @@
     "expo-env.d.ts"
   ],
   "exclude": [
-    "server",
+    "test",
     "worker"
   ]
 }

@@ -5,8 +5,8 @@ import styles from './index.module.css';
 const features = [
   {
     number: '01',
-    title: 'End-to-end encrypted',
-    copy: 'Audio and video are encrypted on the phones before they travel through LiveKit.',
+    title: 'Encrypted phone-to-phone',
+    copy: 'Audio and video are encrypted by WebRTC and travel directly between your phones whenever possible.',
   },
   {
     number: '02',
@@ -213,15 +213,15 @@ export default function LandingPage() {
               </article>
               <article>
                 <h3>Temporary pairing data</h3>
-                <p>Cloudflare temporarily stores a random code, room identifier, encryption key, hashed role-specific recovery credentials, and expiry times. Codes expire after five minutes and session records within 24 hours. Short-lived network address data is processed to prevent abuse.</p>
+                <p>Cloudflare temporarily stores a random code, room identifier, hashed role-specific recovery credentials, single-use signaling tickets, and expiry times. Codes expire after five minutes and session records within 24 hours. Short-lived network address data is processed to prevent abuse.</p>
               </article>
               <article>
                 <h3>Encrypted live media</h3>
-                <p>LiveKit relays media encrypted on the phones. Nappio does not enable server-side recording. Cloudflare and LiveKit may process connection metadata and operational logs under their own privacy and security practices.</p>
+                <p>WebRTC sends encrypted media directly between phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. Nappio does not provide server-side recording. Cloudflare may process connection metadata and operational logs under its privacy and security practices.</p>
               </article>
               <article>
                 <h3>On-device storage and deletion</h3>
-                <p>Recovery credentials and current encryption material are protected by iOS Keychain or Android Keystore. Ending monitoring removes the saved credential from that phone. Server session records are automatically removed at expiry.</p>
+                <p>Recovery credentials are protected by iOS Keychain or Android Keystore. Ending monitoring removes the saved credential from that phone. Server session records are automatically removed at expiry.</p>
               </article>
               <article>
                 <h3>Children and safety</h3>

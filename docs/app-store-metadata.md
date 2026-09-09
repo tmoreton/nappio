@@ -27,7 +27,7 @@ Place one iPhone or iPad near the crib as the Baby Unit. On each Parent Unit, sc
 Nappio includes:
 
 - Live camera and microphone monitoring
-- End-to-end encrypted media
+- WebRTC-encrypted phone-to-phone media
 - Five-minute room invites that can connect multiple Parent Units
 - Push-to-talk audio from a Parent Unit to the Baby Unit
 - Audio-only monitoring designed for a locked Parent device

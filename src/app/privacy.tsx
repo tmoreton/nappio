@@ -13,15 +13,15 @@ const sections = [
   },
   {
     title: 'Pairing and session data',
-    body: 'The Cloudflare pairing service temporarily stores a random pairing code, room identifier, end-to-end encryption key, hashed role-specific recovery credentials, and expiry times. Pairing codes expire after five minutes. Session records expire within 24 hours. Short-lived network address data is processed for abuse prevention.',
+    body: 'The Cloudflare pairing service temporarily stores a random pairing code, room identifier, hashed role-specific recovery credentials, single-use signaling tickets, and expiry times. Pairing codes expire after five minutes. Session records expire within 24 hours. Short-lived network address data is processed for abuse prevention.',
   },
   {
     title: 'Live audio and video',
-    body: 'LiveKit relays encrypted audio and video between the phones in a room. Media is encrypted on the devices and Nappio does not enable server-side recording. Cloudflare and LiveKit may process connection metadata and operational logs under their own privacy and security practices.',
+    body: 'WebRTC sends encrypted audio and video directly between the phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. Nappio does not provide server-side recording. Cloudflare may process connection metadata and operational logs under its privacy and security practices.',
   },
   {
     title: 'Storage and deletion',
-    body: 'The phone stores its recovery credential and current encryption material in iOS Keychain or Android Keystore so a session can survive an app restart. Ending monitoring removes the saved credential from that phone. Server session records are automatically removed at expiry.',
+    body: 'The phone stores its recovery credential in iOS Keychain or Android Keystore so a session can survive an app restart. Ending monitoring removes the saved credential from that phone. Server session records are automatically removed at expiry.',
   },
   {
     title: 'Children and safety',

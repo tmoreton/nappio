@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import type { MonitorSession } from '@/types/monitor';
 
-const SESSION_KEY = 'nappio.monitor-session.v1';
+const SESSION_KEY = 'nappio.monitor-session.v2';
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -14,10 +14,6 @@ function isMonitorSession(value: unknown): value is MonitorSession {
   return (
     (session.role === 'baby' || session.role === 'parent') &&
     isString(session.roomId) &&
-    isString(session.token) &&
-    isString(session.tokenExpiresAt) &&
-    isString(session.livekitUrl) &&
-    isString(session.encryptionKey) &&
     isString(session.expiresAt) &&
     isString(session.sessionExpiresAt) &&
     isString(session.recoveryToken) &&

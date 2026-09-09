@@ -6,11 +6,13 @@ import {
   formatBabyDeviceStatus,
   isBabyBatteryLow,
   parseBabyDeviceStatus,
-} from '../../src/monitoring/baby-device-status';
+  parseBabyDeviceStatusValue,
+} from '../src/monitoring/baby-device-status';
 
 test('Baby Unit power status safely round-trips through the data channel payload', () => {
   const status = { batteryLevel: 0.82, isCharging: true, lowPowerMode: false };
   assert.deepEqual(parseBabyDeviceStatus(encodeBabyDeviceStatus(status)), status);
+  assert.deepEqual(parseBabyDeviceStatusValue(status), status);
 });
 
 test('malformed Baby Unit status is ignored', () => {
@@ -19,6 +21,7 @@ test('malformed Baby Unit status is ignored', () => {
     null,
   );
   assert.equal(parseBabyDeviceStatus(new TextEncoder().encode('not json')), null);
+  assert.equal(parseBabyDeviceStatusValue({ batteryLevel: 0.4, lowPowerMode: false }), null);
 });
 
 test('low battery requires a known level at or below twenty percent while unplugged', () => {

@@ -15,7 +15,9 @@ export function BabyRoom(_props: BabyRoomProps) {
     <View style={styles.container}>
       <Text style={styles.icon}>◉</Text>
       <Text style={styles.title}>Use the iOS or Android development build</Text>
-      <Text style={styles.copy}>LiveKit camera streaming depends on native WebRTC and is unavailable in this web preview.</Text>
+      <Text style={styles.copy}>
+        Direct camera-to-camera WebRTC uses native modules and is unavailable in this web preview.
+      </Text>
     </View>
   );
 }

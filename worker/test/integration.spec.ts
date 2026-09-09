@@ -13,20 +13,48 @@ function post(path: string, body?: unknown, requestId?: string, clientAddress = 
   });
 }
 
-function tokenGrant(token: string) {
-  const encoded = token.split('.')[1]!;
-  const base64 = encoded.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(encoded.length / 4) * 4, '=');
-  return (JSON.parse(atob(base64)) as { video: Record<string, unknown> }).video;
+async function openSignal(recoveryToken: string) {
+  const ticketResponse = await post('/api/signal/ticket', { recoveryToken });
+  expect(ticketResponse.status).toBe(201);
+  const ticket = (await ticketResponse.json()) as {
+    iceServers: { urls: string | string[] }[];
+    signalingUrl: string;
+  };
+  const url = new URL(ticket.signalingUrl);
+  const response = await exports.default.fetch(
+    `https://nappio.test/api/signal${url.search}`,
+    { headers: { Upgrade: 'websocket' } },
+  );
+  return { response, ticket };
+}
+
+function nextSocketData(socket: WebSocket) {
+  return new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Timed out waiting for WebSocket message.')), 2_000);
+    socket.addEventListener(
+      'message',
+      (event) => {
+        clearTimeout(timeout);
+        resolve(String(event.data));
+      },
+      { once: true },
+    );
+  });
+}
+
+async function nextMessage(socket: WebSocket) {
+  return JSON.parse(await nextSocketData(socket)) as Record<string, unknown>;
 }
 
 describe('Nappio pairing Worker', () => {
-  it('reports configured storage and LiveKit credentials', async () => {
+  it('reports configured signaling with STUN-only local fallback', async () => {
     const response = await exports.default.fetch('https://nappio.test/health');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       status: 'ok',
       storage: 'ok',
-      livekit: 'configured',
+      signaling: 'configured',
+      turn: 'stun-only',
     });
   });
 
@@ -36,26 +64,15 @@ describe('Nappio pairing Worker', () => {
     const created = (await createdResponse.json()) as Record<string, string>;
     expect(created.pairingCode).toMatch(/^\d{6}$/);
     expect(created.babyRecoveryToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(created.babyToken.split('.')).toHaveLength(3);
-    expect(tokenGrant(created.babyToken)).toMatchObject({
-      canPublish: true,
-      canPublishData: true,
-      canPublishSources: ['camera', 'microphone'],
-      canSubscribe: true,
-    });
+    expect(created).not.toHaveProperty('babyToken');
+    expect(created).not.toHaveProperty('encryptionKey');
 
     const joinedResponse = await post('/api/pair/join', { pairingCode: created.pairingCode });
     expect(joinedResponse.status).toBe(200);
     const joined = (await joinedResponse.json()) as Record<string, string>;
     expect(joined.roomId).toBe(created.roomId);
-    expect(joined.encryptionKey).toBe(created.encryptionKey);
     expect(joined.parentRecoveryToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(tokenGrant(joined.parentToken)).toMatchObject({
-      canPublish: true,
-      canPublishData: false,
-      canPublishSources: ['microphone'],
-      canSubscribe: true,
-    });
+    expect(joined).not.toHaveProperty('parentToken');
 
     const resumedResponse = await post('/api/session/resume', {
       recoveryToken: joined.parentRecoveryToken,
@@ -64,7 +81,7 @@ describe('Nappio pairing Worker', () => {
     const resumed = (await resumedResponse.json()) as Record<string, string>;
     expect(resumed.role).toBe('parent');
     expect(resumed.roomId).toBe(created.roomId);
-    expect(resumed.token.split('.')).toHaveLength(3);
+    expect(resumed.recoveryToken).toBe(joined.parentRecoveryToken);
   });
 
   it('lets multiple parents join the same active invite', async () => {
@@ -163,5 +180,126 @@ describe('Nappio pairing Worker', () => {
     const response = await post('/api/session/resume', { recoveryToken: 'not-a-token' });
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: 'The saved monitoring session is invalid.' });
+  });
+
+  it('issues single-use signaling tickets and relays only across room roles', async () => {
+    const created = (await (await post('/api/pair/create')).json()) as Record<string, string>;
+    const joined = (await (
+      await post('/api/pair/join', { pairingCode: created.pairingCode })
+    ).json()) as Record<string, string>;
+
+    const babyConnection = await openSignal(created.babyRecoveryToken);
+    expect(babyConnection.ticket.iceServers).toEqual([
+      { urls: ['stun:stun.cloudflare.com:3478'] },
+    ]);
+    expect(babyConnection.response.status).toBe(101);
+    const babySocket = babyConnection.response.webSocket!;
+    babySocket.accept();
+    const babyWelcome = await nextMessage(babySocket);
+    expect(babyWelcome).toMatchObject({ type: 'welcome', role: 'baby', peers: [] });
+
+    const replayUrl = new URL(babyConnection.ticket.signalingUrl);
+    const replay = await exports.default.fetch(
+      `https://nappio.test/api/signal${replayUrl.search}`,
+      { headers: { Upgrade: 'websocket' } },
+    );
+    expect(replay.status).toBe(401);
+
+    const parentJoinedMessage = nextMessage(babySocket);
+    const parentConnection = await openSignal(joined.parentRecoveryToken);
+    expect(parentConnection.response.status).toBe(101);
+    const parentSocket = parentConnection.response.webSocket!;
+    parentSocket.accept();
+    const parentWelcome = await nextMessage(parentSocket);
+    const parentJoined = await parentJoinedMessage;
+    expect(parentWelcome).toMatchObject({
+      type: 'welcome',
+      role: 'parent',
+      peers: [{ peerId: babyWelcome.peerId, role: 'baby' }],
+    });
+    expect(parentJoined).toMatchObject({
+      type: 'peer-joined',
+      peer: { peerId: parentWelcome.peerId, role: 'parent' },
+    });
+
+    const pong = nextSocketData(parentSocket);
+    parentSocket.send('ping');
+    await expect(pong).resolves.toBe('pong');
+
+    const connectionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const relayedMessage = nextMessage(babySocket);
+    parentSocket.send(
+      JSON.stringify({
+        type: 'signal',
+        targetPeerId: babyWelcome.peerId,
+        connectionId,
+        description: { type: 'offer', sdp: 'v=0\\r\\n' },
+      }),
+    );
+    await expect(relayedMessage).resolves.toMatchObject({
+      type: 'signal',
+      fromPeerId: parentWelcome.peerId,
+      connectionId,
+      description: { type: 'offer', sdp: 'v=0\\r\\n' },
+    });
+
+    parentSocket.close(1000, 'Test complete.');
+    babySocket.close(1000, 'Test complete.');
+  });
+
+  it('caps rooms at three simultaneous Parent connections', async () => {
+    const clientAddress = '203.0.113.80';
+    const created = (await (
+      await post('/api/pair/create', undefined, undefined, clientAddress)
+    ).json()) as Record<string, string>;
+    const parents: Record<string, string>[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      parents.push(
+        (await (
+          await post(
+            '/api/pair/join',
+            { pairingCode: created.pairingCode },
+            undefined,
+            clientAddress,
+          )
+        ).json()) as Record<string, string>,
+      );
+    }
+
+    const sockets: WebSocket[] = [];
+    const peerIds: string[] = [];
+    for (const parent of parents.slice(0, 3)) {
+      const connection = await openSignal(parent.parentRecoveryToken);
+      expect(connection.response.status).toBe(101);
+      const socket = connection.response.webSocket!;
+      socket.accept();
+      const welcome = await nextMessage(socket);
+      expect(welcome).toMatchObject({ role: 'parent', peers: [] });
+      peerIds.push(String(welcome.peerId));
+      sockets.push(socket);
+    }
+
+    const unavailable = nextMessage(sockets[0]!);
+    sockets[0]!.send(
+      JSON.stringify({
+        type: 'signal',
+        targetPeerId: peerIds[1],
+        connectionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        candidate: { candidate: 'candidate', sdpMid: null, sdpMLineIndex: 0 },
+      }),
+    );
+    await expect(unavailable).resolves.toEqual({
+      type: 'peer-unavailable',
+      peerId: peerIds[1],
+    });
+
+    const fourth = await post('/api/signal/ticket', {
+      recoveryToken: parents[3]!.parentRecoveryToken,
+    });
+    expect(fourth.status).toBe(409);
+    await expect(fourth.json()).resolves.toEqual({
+      error: 'This room already has three connected Parent Units.',
+    });
+    sockets.forEach((socket) => socket.close(1000, 'Test complete.'));
   });
 });

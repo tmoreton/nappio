@@ -1,10 +1,6 @@
 export type CreatePairingResponse = {
   pairingCode: string;
   roomId: string;
-  babyToken: string;
-  tokenExpiresAt: string;
-  livekitUrl: string;
-  encryptionKey: string;
   expiresAt: string;
   sessionExpiresAt: string;
   babyRecoveryToken: string;
@@ -12,10 +8,6 @@ export type CreatePairingResponse = {
 
 export type JoinPairingResponse = {
   roomId: string;
-  parentToken: string;
-  tokenExpiresAt: string;
-  livekitUrl: string;
-  encryptionKey: string;
   expiresAt: string;
   sessionExpiresAt: string;
   parentRecoveryToken: string;
@@ -24,12 +16,23 @@ export type JoinPairingResponse = {
 export type ResumeSessionResponse = {
   role: 'baby' | 'parent';
   roomId: string;
-  token: string;
-  tokenExpiresAt: string;
-  livekitUrl: string;
-  encryptionKey: string;
   expiresAt: string;
   sessionExpiresAt: string;
   recoveryToken: string;
   pairingCode?: string;
+};
+
+export type IceServer = {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+};
+
+export type SignalTicketResponse = {
+  ticket: string;
+  roomId: string;
+  role: 'baby' | 'parent';
+  expiresAt: string;
+  signalingUrl: string;
+  iceServers: IceServer[];
 };

@@ -9,11 +9,10 @@ import { ActionButton } from '@/components/action-button';
 import { ConnectionStatus } from '@/components/connection-status';
 import { PairingCode } from '@/components/pairing-code';
 import { palette, radii, spacing } from '@/constants/design';
-import { BabyRoom } from '@/livekit/baby-room';
+import { BabyRoom } from '@/realtime/baby-room';
 import { useMonitoringKeepAwake } from '@/livekit/use-monitoring-keep-awake';
 import { createPairing, PairingApiError, resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
-import { hasFreshAccessToken } from '@/state/session-lifecycle';
 import type { MonitorStatus } from '@/types/monitor';
 
 export default function BabyScreen() {
@@ -50,10 +49,6 @@ export default function BabyScreen() {
 
       const savedSession = session?.role === 'baby' ? session : null;
       if (session && !savedSession) clearSession();
-      if (savedSession && hasFreshAccessToken(savedSession)) {
-        setIsPrepared(true);
-        return;
-      }
       if (savedSession) {
         try {
           const recovered = await resumeSession(savedSession.recoveryToken);
@@ -73,10 +68,6 @@ export default function BabyScreen() {
       setSession({
         role: 'baby',
         roomId: pairing.roomId,
-        token: pairing.babyToken,
-        tokenExpiresAt: pairing.tokenExpiresAt,
-        livekitUrl: pairing.livekitUrl,
-        encryptionKey: pairing.encryptionKey,
         expiresAt: pairing.expiresAt,
         sessionExpiresAt: pairing.sessionExpiresAt,
         recoveryToken: pairing.babyRecoveryToken,

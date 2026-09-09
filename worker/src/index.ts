@@ -1,14 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
-import { AccessToken, TrackSource } from 'livekit-server-sdk';
 
 type Env = {
   PAIRINGS: DurableObjectNamespace;
-  LIVEKIT_URL: string;
-  LIVEKIT_API_KEY: string;
-  LIVEKIT_API_SECRET: string;
+  SESSION_SECRET: string;
+  TURN_KEY_ID?: string;
+  TURN_KEY_API_TOKEN?: string;
   PAIRING_TTL_SECONDS: string;
   SESSION_TTL_SECONDS: string;
-  TOKEN_TTL_SECONDS: string;
 };
 
 type ParticipantRole = 'baby' | 'parent';
@@ -16,7 +14,6 @@ type ParticipantRole = 'baby' | 'parent';
 type PairingRow = {
   pairingCode: string;
   roomId: string;
-  encryptionKey: string;
   expiresAt: number;
   sessionExpiresAt: number;
   claimed: number;
@@ -37,6 +34,22 @@ type InternalRequest = {
   recoveryToken?: string;
   requestId?: string;
 };
+
+type IceServer = {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+};
+
+type SignalSocketAttachment = {
+  peerId: string;
+  recoveryHash: string;
+  role: ParticipantRole;
+  roomId: string;
+  sessionExpiresAt: number;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const responseHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Idempotency-Key',
@@ -60,6 +73,17 @@ function positiveInteger(value: string | undefined, fallback: number, name: stri
   return parsed;
 }
 
+function hasValidSessionSecret(secret: string | undefined) {
+  return typeof secret === 'string' && secret.trim().length >= 32;
+}
+
+function sessionSecret(env: Env) {
+  if (!hasValidSessionSecret(env.SESSION_SECRET)) {
+    throw new Error('SESSION_SECRET must contain at least 32 characters.');
+  }
+  return env.SESSION_SECRET.trim();
+}
+
 function randomBase64Url(byteLength: number) {
   const bytes = new Uint8Array(byteLength);
   crypto.getRandomValues(bytes);
@@ -76,7 +100,7 @@ function randomPairingCode() {
 
 function requestIdFrom(request: Request) {
   const value = request.headers.get('Idempotency-Key')?.trim();
-  return value && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  return value && UUID_PATTERN.test(value)
     ? value
     : crypto.randomUUID();
 }
@@ -108,45 +132,13 @@ async function readJson(request: Request) {
   return text ? (JSON.parse(text) as Record<string, unknown>) : {};
 }
 
-async function createLiveKitToken(role: ParticipantRole, roomId: string, env: Env) {
-  if (!env.LIVEKIT_API_KEY || !env.LIVEKIT_API_SECRET) {
-    throw new Error('LiveKit credentials are not configured.');
-  }
-  if (!/^wss:\/\//.test(env.LIVEKIT_URL)) {
-    throw new Error('LIVEKIT_URL must be a secure wss:// URL.');
-  }
-
-  const ttlSeconds = positiveInteger(env.TOKEN_TTL_SECONDS, 21_600, 'TOKEN_TTL_SECONDS');
-  const token = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
-    identity: `${role}-${crypto.randomUUID()}`,
-    name: role === 'baby' ? 'Baby Unit' : 'Parent Unit',
-    ttl: ttlSeconds,
-    attributes: { role },
-  });
-  token.addGrant({
-    room: roomId,
-    roomJoin: true,
-    canPublish: true,
-    canPublishSources:
-      role === 'baby'
-        ? [TrackSource.CAMERA, TrackSource.MICROPHONE]
-        : [TrackSource.MICROPHONE],
-    canSubscribe: true,
-    canPublishData: role === 'baby',
-  });
-  return {
-    token: await token.toJwt(),
-    tokenExpiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
-  };
-}
-
 function coordinator(env: Env) {
   return env.PAIRINGS.getByName('global-pairings');
 }
 
 async function coordinatorRequest(
   env: Env,
-  path: '/create' | '/claim' | '/resume' | '/health',
+  path: '/create' | '/claim' | '/resume' | '/signal-ticket' | '/health',
   payload?: InternalRequest,
 ) {
   return coordinator(env).fetch(`https://pairings.internal${path}`, {
@@ -162,7 +154,7 @@ async function handleCreate(request: Request, env: Env) {
     requestId: requestIdFrom(request),
   });
   const payload = (await internal.json()) as Record<string, unknown>;
-  return jsonResponse(internal.status, internal.ok ? { ...payload, livekitUrl: env.LIVEKIT_URL } : payload);
+  return jsonResponse(internal.status, payload);
 }
 
 async function handleJoin(request: Request, env: Env) {
@@ -178,7 +170,7 @@ async function handleJoin(request: Request, env: Env) {
     requestId: requestIdFrom(request),
   });
   const payload = (await internal.json()) as Record<string, unknown>;
-  return jsonResponse(internal.status, internal.ok ? { ...payload, livekitUrl: env.LIVEKIT_URL } : payload);
+  return jsonResponse(internal.status, payload);
 }
 
 async function handleResume(request: Request, env: Env) {
@@ -193,12 +185,89 @@ async function handleResume(request: Request, env: Env) {
     recoveryToken,
   });
   const payload = (await internal.json()) as Record<string, unknown>;
-  return jsonResponse(internal.status, internal.ok ? { ...payload, livekitUrl: env.LIVEKIT_URL } : payload);
+  return jsonResponse(internal.status, payload);
+}
+
+function signalingUrlFor(request: Request, ticket: string) {
+  const url = new URL('/api/signal', request.url);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.searchParams.set('ticket', ticket);
+  return url.toString();
+}
+
+async function generateIceServers(env: Env): Promise<IceServer[]> {
+  if (!env.TURN_KEY_ID || !env.TURN_KEY_API_TOKEN) {
+    return [{ urls: ['stun:stun.cloudflare.com:3478'] }];
+  }
+
+  const response = await fetch(
+    `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.TURN_KEY_ID)}/credentials/generate-ice-servers`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.TURN_KEY_API_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ttl: 86_400 }),
+    },
+  );
+  if (!response.ok) throw new Error('TURN credentials could not be generated.');
+  const payload = (await response.json()) as { iceServers?: IceServer[] };
+  if (!Array.isArray(payload.iceServers) || payload.iceServers.length === 0) {
+    throw new Error('TURN credential response did not include ICE servers.');
+  }
+  return payload.iceServers
+    .map((server) => ({
+      ...server,
+      urls: Array.isArray(server.urls)
+        ? server.urls.filter((url) => !url.includes('cloudflare.com:53'))
+        : server.urls.includes('cloudflare.com:53')
+          ? []
+          : server.urls,
+    }))
+    .filter(({ urls }) => typeof urls === 'string' || urls.length > 0);
+}
+
+async function handleSignalTicket(request: Request, env: Env) {
+  const body = await readJson(request);
+  const recoveryToken = typeof body.recoveryToken === 'string' ? body.recoveryToken : '';
+  if (!/^[A-Za-z0-9_-]{43}$/.test(recoveryToken)) {
+    return jsonResponse(400, { error: 'The saved monitoring session is invalid.' });
+  }
+
+  const internal = await coordinatorRequest(env, '/signal-ticket', { recoveryToken });
+  const payload = (await internal.json()) as Record<string, unknown>;
+  if (!internal.ok) return jsonResponse(internal.status, payload);
+  const ticket = typeof payload.ticket === 'string' ? payload.ticket : '';
+  const roomId = typeof payload.roomId === 'string' ? payload.roomId : '';
+  const iceServers = await generateIceServers(env);
+  return jsonResponse(201, {
+    ...payload,
+    signalingUrl: signalingUrlFor(request, ticket),
+    iceServers,
+  });
+}
+
+function handleSignal(request: Request, env: Env) {
+  if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
+    return jsonResponse(426, { error: 'A WebSocket connection is required.' });
+  }
+  const source = new URL(request.url);
+  const ticket = source.searchParams.get('ticket') ?? '';
+  if (!/^[A-Za-z0-9_-]{43}$/.test(ticket)) {
+    return jsonResponse(401, { error: 'The signaling ticket is invalid.' });
+  }
+  const internalUrl = new URL('https://pairings.internal/signal');
+  internalUrl.searchParams.set('ticket', ticket);
+  return coordinator(env).fetch(internalUrl.toString(), {
+    headers: { Upgrade: 'websocket' },
+  });
 }
 
 export class PairingCoordinator extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS pairings (
         pairing_code TEXT PRIMARY KEY,
@@ -213,6 +282,16 @@ export class PairingCoordinator extends DurableObject<Env> {
         window_started_at INTEGER NOT NULL,
         attempts INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS signal_tickets (
+        ticket_hash TEXT PRIMARY KEY,
+        recovery_hash TEXT NOT NULL,
+        room_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('baby', 'parent')),
+        expires_at INTEGER NOT NULL,
+        session_expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS signal_tickets_expires_at
+        ON signal_tickets (expires_at);
     `);
 
     const columns = new Set(
@@ -284,7 +363,7 @@ export class PairingCoordinator extends DurableObject<Env> {
     return this.ctx.storage.sql
       .exec<PairingRow>(
         `SELECT pairing_code AS pairingCode, room_id AS roomId,
-                encryption_key AS encryptionKey, expires_at AS expiresAt,
+                expires_at AS expiresAt,
                 session_expires_at AS sessionExpiresAt, claimed,
                 baby_recovery_hash AS babyRecoveryHash,
                 parent_recovery_hash AS parentRecoveryHash,
@@ -300,7 +379,7 @@ export class PairingCoordinator extends DurableObject<Env> {
     return this.ctx.storage.sql
       .exec<PairingRow>(
         `SELECT pairing_code AS pairingCode, room_id AS roomId,
-                encryption_key AS encryptionKey, expires_at AS expiresAt,
+                expires_at AS expiresAt,
                 session_expires_at AS sessionExpiresAt, claimed,
                 baby_recovery_hash AS babyRecoveryHash,
                 parent_recovery_hash AS parentRecoveryHash,
@@ -316,7 +395,7 @@ export class PairingCoordinator extends DurableObject<Env> {
     return this.ctx.storage.sql
       .exec<ParentSessionRow>(
         `SELECT p.pairing_code AS pairingCode, p.room_id AS roomId,
-                p.encryption_key AS encryptionKey, p.expires_at AS expiresAt,
+                p.expires_at AS expiresAt,
                 p.session_expires_at AS sessionExpiresAt, p.claimed,
                 p.baby_recovery_hash AS babyRecoveryHash,
                 s.recovery_hash AS parentRecoveryHash,
@@ -334,7 +413,7 @@ export class PairingCoordinator extends DurableObject<Env> {
     return this.ctx.storage.sql
       .exec<ParentSessionRow>(
         `SELECT p.pairing_code AS pairingCode, p.room_id AS roomId,
-                p.encryption_key AS encryptionKey, p.expires_at AS expiresAt,
+                p.expires_at AS expiresAt,
                 p.session_expires_at AS sessionExpiresAt, p.claimed,
                 p.baby_recovery_hash AS babyRecoveryHash,
                 s.recovery_hash AS parentRecoveryHash,
@@ -351,6 +430,7 @@ export class PairingCoordinator extends DurableObject<Env> {
   }
 
   private purgeExpiredSessions(now: number) {
+    this.ctx.storage.sql.exec('DELETE FROM signal_tickets WHERE expires_at <= ?', now);
     this.ctx.storage.sql.exec(
       `DELETE FROM parent_sessions
        WHERE pairing_code IN (
@@ -379,17 +459,13 @@ export class PairingCoordinator extends DurableObject<Env> {
     this.purgeExpiredSessions(now);
     const existing = this.rowForCreateRequest(requestId);
     if (existing) {
-      const babyRecoveryToken = await recoveryTokenFor('baby', requestId, this.env.LIVEKIT_API_SECRET);
-      const access = await createLiveKitToken('baby', existing.roomId, this.env);
+      const babyRecoveryToken = await recoveryTokenFor('baby', requestId, sessionSecret(this.env));
       return {
         pairingCode: existing.pairingCode,
         roomId: existing.roomId,
-        encryptionKey: existing.encryptionKey,
         expiresAt: new Date(existing.expiresAt).toISOString(),
         sessionExpiresAt: new Date(existing.sessionExpiresAt).toISOString(),
         babyRecoveryToken,
-        babyToken: access.token,
-        tokenExpiresAt: access.tokenExpiresAt,
       };
     }
 
@@ -401,21 +477,18 @@ export class PairingCoordinator extends DurableObject<Env> {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const pairingCode = randomPairingCode();
       const roomId = `monitor-${crypto.randomUUID()}`;
-      const encryptionKey = randomBase64Url(32);
-      const babyRecoveryToken = await recoveryTokenFor('baby', requestId, this.env.LIVEKIT_API_SECRET);
+      const babyRecoveryToken = await recoveryTokenFor('baby', requestId, sessionSecret(this.env));
       const babyRecoveryHash = await hashRecoveryToken(babyRecoveryToken);
-      const access = await createLiveKitToken('baby', roomId, this.env);
       const inserted = this.ctx.storage.sql
         .exec<{ pairingCode: string }>(
           `INSERT OR IGNORE INTO pairings
            (pairing_code, room_id, encryption_key, expires_at, claimed,
             baby_recovery_hash, parent_recovery_hash, session_expires_at,
             create_request_id, claim_request_id)
-           VALUES (?, ?, ?, ?, 0, ?, NULL, ?, ?, NULL)
+           VALUES (?, ?, '', ?, 0, ?, NULL, ?, ?, NULL)
            RETURNING pairing_code AS pairingCode`,
           pairingCode,
           roomId,
-          encryptionKey,
           pairingExpiresAt,
           babyRecoveryHash,
           sessionExpiresAt,
@@ -427,12 +500,9 @@ export class PairingCoordinator extends DurableObject<Env> {
         return {
           pairingCode,
           roomId,
-          encryptionKey,
           expiresAt: new Date(pairingExpiresAt).toISOString(),
           sessionExpiresAt: new Date(sessionExpiresAt).toISOString(),
           babyRecoveryToken,
-          babyToken: access.token,
-          tokenExpiresAt: access.tokenExpiresAt,
         };
       }
 
@@ -441,16 +511,12 @@ export class PairingCoordinator extends DurableObject<Env> {
       // unique request ID as a pairing-code collision for all remaining attempts.
       const concurrentReplay = this.rowForCreateRequest(requestId);
       if (concurrentReplay) {
-        const replayAccess = await createLiveKitToken('baby', concurrentReplay.roomId, this.env);
         return {
           pairingCode: concurrentReplay.pairingCode,
           roomId: concurrentReplay.roomId,
-          encryptionKey: concurrentReplay.encryptionKey,
           expiresAt: new Date(concurrentReplay.expiresAt).toISOString(),
           sessionExpiresAt: new Date(concurrentReplay.sessionExpiresAt).toISOString(),
           babyRecoveryToken,
-          babyToken: replayAccess.token,
-          tokenExpiresAt: replayAccess.tokenExpiresAt,
         };
       }
     }
@@ -478,14 +544,10 @@ export class PairingCoordinator extends DurableObject<Env> {
       const parentRecoveryToken = await recoveryTokenFor(
         'parent',
         requestId,
-        this.env.LIVEKIT_API_SECRET,
+        sessionSecret(this.env),
       );
-      const access = await createLiveKitToken('parent', replay.roomId, this.env);
       return jsonResponse(200, {
         roomId: replay.roomId,
-        parentToken: access.token,
-        tokenExpiresAt: access.tokenExpiresAt,
-        encryptionKey: replay.encryptionKey,
         expiresAt: new Date(replay.expiresAt).toISOString(),
         sessionExpiresAt: new Date(replay.sessionExpiresAt).toISOString(),
         parentRecoveryToken,
@@ -497,9 +559,8 @@ export class PairingCoordinator extends DurableObject<Env> {
       return this.pairingFailure(row, pairingCode);
     }
 
-    const parentRecoveryToken = await recoveryTokenFor('parent', requestId, this.env.LIVEKIT_API_SECRET);
+    const parentRecoveryToken = await recoveryTokenFor('parent', requestId, sessionSecret(this.env));
     const parentRecoveryHash = await hashRecoveryToken(parentRecoveryToken);
-    const access = await createLiveKitToken('parent', row.roomId, this.env);
     const inserted = this.ctx.storage.sql
       .exec<{ pairingCode: string }>(
         `INSERT OR IGNORE INTO parent_sessions (recovery_hash, pairing_code, claim_request_id)
@@ -517,9 +578,6 @@ export class PairingCoordinator extends DurableObject<Env> {
       if (concurrentReplay?.pairingCode === pairingCode) {
         return jsonResponse(200, {
           roomId: concurrentReplay.roomId,
-          parentToken: access.token,
-          tokenExpiresAt: access.tokenExpiresAt,
-          encryptionKey: concurrentReplay.encryptionKey,
           expiresAt: new Date(concurrentReplay.expiresAt).toISOString(),
           sessionExpiresAt: new Date(concurrentReplay.sessionExpiresAt).toISOString(),
           parentRecoveryToken,
@@ -534,9 +592,6 @@ export class PairingCoordinator extends DurableObject<Env> {
 
     return jsonResponse(200, {
       roomId: row.roomId,
-      parentToken: access.token,
-      tokenExpiresAt: access.tokenExpiresAt,
-      encryptionKey: row.encryptionKey,
       expiresAt: new Date(row.expiresAt).toISOString(),
       sessionExpiresAt: new Date(row.sessionExpiresAt).toISOString(),
       parentRecoveryToken,
@@ -549,7 +604,7 @@ export class PairingCoordinator extends DurableObject<Env> {
     const babyRow = this.ctx.storage.sql
       .exec<PairingRow>(
         `SELECT pairing_code AS pairingCode, room_id AS roomId,
-                encryption_key AS encryptionKey, expires_at AS expiresAt,
+                expires_at AS expiresAt,
                 session_expires_at AS sessionExpiresAt, claimed,
                 baby_recovery_hash AS babyRecoveryHash,
                 parent_recovery_hash AS parentRecoveryHash,
@@ -569,13 +624,9 @@ export class PairingCoordinator extends DurableObject<Env> {
     }
 
     const role: ParticipantRole = babyRow ? 'baby' : 'parent';
-    const access = await createLiveKitToken(role, row.roomId, this.env);
     return jsonResponse(200, {
       role,
       roomId: row.roomId,
-      token: access.token,
-      tokenExpiresAt: access.tokenExpiresAt,
-      encryptionKey: row.encryptionKey,
       expiresAt: new Date(row.expiresAt).toISOString(),
       sessionExpiresAt: new Date(row.sessionExpiresAt).toISOString(),
       pairingCode: role === 'baby' && row.expiresAt > now ? row.pairingCode : undefined,
@@ -583,8 +634,293 @@ export class PairingCoordinator extends DurableObject<Env> {
     });
   }
 
+  private async membershipForRecoveryToken(recoveryToken: string) {
+    const recoveryHash = await hashRecoveryToken(recoveryToken);
+    const now = Date.now();
+    const babyRow = this.ctx.storage.sql
+      .exec<{ roomId: string; sessionExpiresAt: number }>(
+        `SELECT room_id AS roomId, session_expires_at AS sessionExpiresAt FROM pairings
+         WHERE session_expires_at > ? AND baby_recovery_hash = ?
+         LIMIT 1`,
+        now,
+        recoveryHash,
+      )
+      .toArray()[0];
+    if (babyRow) {
+      return {
+        recoveryHash,
+        role: 'baby' as const,
+        roomId: babyRow.roomId,
+        sessionExpiresAt: babyRow.sessionExpiresAt,
+      };
+    }
+    const parentRow = this.ctx.storage.sql
+      .exec<{ roomId: string; sessionExpiresAt: number }>(
+        `SELECT p.room_id AS roomId, p.session_expires_at AS sessionExpiresAt
+         FROM parent_sessions s
+         JOIN pairings p ON p.pairing_code = s.pairing_code
+         WHERE p.session_expires_at > ? AND s.recovery_hash = ?
+         LIMIT 1`,
+        now,
+        recoveryHash,
+      )
+      .toArray()[0];
+    return parentRow
+      ? {
+          recoveryHash,
+          role: 'parent' as const,
+          roomId: parentRow.roomId,
+          sessionExpiresAt: parentRow.sessionExpiresAt,
+        }
+      : undefined;
+  }
+
+  private async createSignalTicket(recoveryToken: string) {
+    this.ctx.storage.sql.exec('DELETE FROM signal_tickets WHERE expires_at <= ?', Date.now());
+    const membership = await this.membershipForRecoveryToken(recoveryToken);
+    if (!membership) {
+      return jsonResponse(410, { error: 'The saved monitoring session is no longer available.' });
+    }
+    if (membership.role === 'parent') {
+      const connectedParents = new Set(
+        this.roomSockets(membership.roomId)
+          .filter((socket) => socket.readyState === WebSocket.OPEN)
+          .map((socket) => this.attachmentFor(socket))
+          .filter(
+            (attachment): attachment is SignalSocketAttachment =>
+              Boolean(attachment) &&
+              attachment!.role === 'parent' &&
+              attachment!.recoveryHash !== membership.recoveryHash,
+          )
+          .map(({ recoveryHash }) => recoveryHash),
+      );
+      if (connectedParents.size >= 3) {
+        return jsonResponse(409, { error: 'This room already has three connected Parent Units.' });
+      }
+    }
+
+    const ticket = randomBase64Url(32);
+    const ticketHash = await hashRecoveryToken(ticket);
+    const expiresAt = Date.now() + 60_000;
+    this.ctx.storage.sql.exec(
+      `INSERT INTO signal_tickets
+       (ticket_hash, recovery_hash, room_id, role, expires_at, session_expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      ticketHash,
+      membership.recoveryHash,
+      membership.roomId,
+      membership.role,
+      expiresAt,
+      membership.sessionExpiresAt,
+    );
+    return jsonResponse(201, {
+      ticket,
+      roomId: membership.roomId,
+      role: membership.role,
+      expiresAt: new Date(expiresAt).toISOString(),
+    });
+  }
+
+  private async consumeSignalTicket(ticket: string) {
+    const ticketHash = await hashRecoveryToken(ticket);
+    return this.ctx.storage.sql
+      .exec<{
+        recoveryHash: string;
+        role: ParticipantRole;
+        roomId: string;
+        sessionExpiresAt: number;
+      }>(
+        `DELETE FROM signal_tickets
+         WHERE ticket_hash = ? AND expires_at > ?
+         RETURNING recovery_hash AS recoveryHash, role, room_id AS roomId,
+                   session_expires_at AS sessionExpiresAt`,
+        ticketHash,
+        Date.now(),
+      )
+      .toArray()[0];
+  }
+
+  private attachmentFor(socket: WebSocket) {
+    return socket.deserializeAttachment() as SignalSocketAttachment | null;
+  }
+
+  private roomSockets(roomId: string) {
+    return this.ctx.getWebSockets(roomId);
+  }
+
+  private broadcastPeerEvent(
+    attachment: SignalSocketAttachment,
+    type: 'peer-joined' | 'peer-left',
+    excludedSocket?: WebSocket,
+  ) {
+    const message = JSON.stringify({
+      type,
+      peer: { peerId: attachment.peerId, role: attachment.role },
+    });
+    for (const socket of this.roomSockets(attachment.roomId)) {
+      if (socket === excludedSocket || socket.readyState !== WebSocket.OPEN) continue;
+      const recipient = this.attachmentFor(socket);
+      if (!recipient || recipient.role === attachment.role) continue;
+      socket.send(message);
+    }
+  }
+
+  private async acceptSignalSocket(request: Request) {
+    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
+      return jsonResponse(426, { error: 'A WebSocket connection is required.' });
+    }
+    const ticket = new URL(request.url).searchParams.get('ticket') ?? '';
+    if (!/^[A-Za-z0-9_-]{43}$/.test(ticket)) {
+      return jsonResponse(401, { error: 'The signaling ticket is invalid.' });
+    }
+    const membership = await this.consumeSignalTicket(ticket);
+    if (!membership) {
+      return jsonResponse(401, { error: 'The signaling ticket is expired or was already used.' });
+    }
+
+    const existingSockets = this.roomSockets(membership.roomId);
+    const uniqueParents = new Set(
+      existingSockets
+        .filter((socket) => socket.readyState === WebSocket.OPEN)
+        .map((socket) => this.attachmentFor(socket))
+        .filter(
+          (attachment): attachment is SignalSocketAttachment =>
+            Boolean(attachment) &&
+            attachment!.role === 'parent' &&
+            attachment!.recoveryHash !== membership.recoveryHash,
+        )
+        .map(({ recoveryHash }) => recoveryHash),
+    );
+    if (membership.role === 'parent' && uniqueParents.size >= 3) {
+      return jsonResponse(409, { error: 'This room already has three connected Parent Units.' });
+    }
+
+    for (const socket of existingSockets) {
+      const attachment = this.attachmentFor(socket);
+      if (!attachment || attachment.recoveryHash !== membership.recoveryHash) continue;
+      this.broadcastPeerEvent(attachment, 'peer-left', socket);
+      socket.close(4001, 'Reconnected from another socket.');
+    }
+
+    const pair = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    const attachment: SignalSocketAttachment = {
+      peerId: crypto.randomUUID(),
+      recoveryHash: membership.recoveryHash,
+      role: membership.role,
+      roomId: membership.roomId,
+      sessionExpiresAt: membership.sessionExpiresAt,
+    };
+    this.ctx.acceptWebSocket(server, [membership.roomId]);
+    server.serializeAttachment(attachment);
+
+    const peers = this.roomSockets(membership.roomId)
+      .filter((socket) => socket !== server && socket.readyState === WebSocket.OPEN)
+      .map((socket) => this.attachmentFor(socket))
+      .filter(
+        (peer): peer is SignalSocketAttachment =>
+          Boolean(peer) && peer!.role !== membership.role,
+      )
+      .map(({ peerId, role }) => ({ peerId, role }));
+    server.send(
+      JSON.stringify({
+        type: 'welcome',
+        peerId: attachment.peerId,
+        role: attachment.role,
+        peers,
+      }),
+    );
+    this.broadcastPeerEvent(attachment, 'peer-joined', server);
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  private relaySignal(socket: WebSocket, message: unknown) {
+    const sender = this.attachmentFor(socket);
+    if (!sender || !message || typeof message !== 'object') return;
+    const signal = message as Record<string, unknown>;
+    if (signal.type !== 'signal') return;
+    const targetPeerId = typeof signal.targetPeerId === 'string' ? signal.targetPeerId : '';
+    const connectionId = typeof signal.connectionId === 'string' ? signal.connectionId : '';
+    if (!UUID_PATTERN.test(targetPeerId) || !UUID_PATTERN.test(connectionId)) return;
+
+    const description = signal.description as Record<string, unknown> | undefined;
+    const candidate = signal.candidate as Record<string, unknown> | undefined;
+    const validDescription =
+      description &&
+      (description.type === 'offer' || description.type === 'answer') &&
+      typeof description.sdp === 'string' &&
+      description.sdp.length <= 24_000;
+    const validCandidate =
+      candidate &&
+      typeof candidate.candidate === 'string' &&
+      candidate.candidate.length <= 4_096 &&
+      (candidate.sdpMid === null || typeof candidate.sdpMid === 'string') &&
+      (candidate.sdpMLineIndex === null || Number.isInteger(candidate.sdpMLineIndex));
+    if (Boolean(validDescription) === Boolean(validCandidate)) return;
+
+    const target = this.roomSockets(sender.roomId).find((candidateSocket) => {
+      const attachment = this.attachmentFor(candidateSocket);
+      return (
+        candidateSocket.readyState === WebSocket.OPEN &&
+        attachment?.peerId === targetPeerId &&
+        attachment.role !== sender.role
+      );
+    });
+    if (!target) {
+      socket.send(JSON.stringify({ type: 'peer-unavailable', peerId: targetPeerId }));
+      return;
+    }
+    target.send(
+      JSON.stringify({
+        type: 'signal',
+        fromPeerId: sender.peerId,
+        connectionId,
+        ...(validDescription ? { description } : { candidate }),
+      }),
+    );
+  }
+
+  webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
+    if (typeof message !== 'string' || message.length > 32_768) {
+      socket.close(1009, 'Signaling message is too large.');
+      return;
+    }
+    const attachment = this.attachmentFor(socket);
+    if (!attachment || attachment.sessionExpiresAt <= Date.now()) {
+      socket.close(4004, 'This monitoring room has expired.');
+      return;
+    }
+    if (message === 'ping') {
+      socket.send('pong');
+      return;
+    }
+    try {
+      this.relaySignal(socket, JSON.parse(message));
+    } catch {
+      socket.send(JSON.stringify({ type: 'error', error: 'Invalid signaling message.' }));
+    }
+  }
+
+  webSocketClose(socket: WebSocket) {
+    const attachment = this.attachmentFor(socket);
+    if (attachment) this.broadcastPeerEvent(attachment, 'peer-left', socket);
+  }
+
+  webSocketError(socket: WebSocket) {
+    const attachment = this.attachmentFor(socket);
+    if (attachment) this.broadcastPeerEvent(attachment, 'peer-left', socket);
+    socket.close(1011, 'Signaling connection failed.');
+  }
+
   async alarm() {
     const now = Date.now();
+    for (const socket of this.ctx.getWebSockets()) {
+      const attachment = this.attachmentFor(socket);
+      if (!attachment || attachment.sessionExpiresAt > now) continue;
+      this.broadcastPeerEvent(attachment, 'peer-left', socket);
+      socket.close(4004, 'This monitoring room has expired.');
+    }
     this.purgeExpiredSessions(now);
     this.ctx.storage.sql.exec('DELETE FROM rate_limits WHERE window_started_at <= ?', now - 60_000);
     await this.scheduleCleanup();
@@ -595,9 +931,15 @@ export class PairingCoordinator extends DurableObject<Env> {
     if (request.method === 'GET' && url.pathname === '/health') {
       return jsonResponse(200, { status: 'ok' });
     }
+    if (request.method === 'GET' && url.pathname === '/signal') {
+      return this.acceptSignalSocket(request);
+    }
     if (request.method !== 'POST') return jsonResponse(405, { error: 'Method not allowed.' });
 
     const body = (await request.json()) as InternalRequest;
+    if (url.pathname === '/signal-ticket' && /^[A-Za-z0-9_-]{43}$/.test(body.recoveryToken ?? '')) {
+      return this.createSignalTicket(body.recoveryToken!);
+    }
     const clientAddress = body.clientAddress?.trim() || 'unknown';
     if (!this.consumeRateLimit(clientAddress)) {
       return jsonResponse(429, { error: 'Too many pairing attempts. Wait a minute and try again.' });
@@ -605,12 +947,12 @@ export class PairingCoordinator extends DurableObject<Env> {
 
     if (
       url.pathname === '/create' &&
-      /^[0-9a-f-]{36}$/i.test(body.requestId ?? '')
+      UUID_PATTERN.test(body.requestId ?? '')
     ) {
       return jsonResponse(201, await this.createPairing(body.requestId!));
     }
     if (url.pathname === '/claim' && /^\d{6}$/.test(body.pairingCode ?? '')) {
-      if (!/^[0-9a-f-]{36}$/i.test(body.requestId ?? '')) {
+      if (!UUID_PATTERN.test(body.requestId ?? '')) {
         return jsonResponse(400, { error: 'Invalid pairing request.' });
       }
       return this.claimPairing(body.pairingCode!, body.requestId!);
@@ -632,15 +974,22 @@ export default {
     if (request.method === 'GET' && url.pathname === '/health') {
       try {
         const storage = await coordinatorRequest(env, '/health');
-        return jsonResponse(storage.ok ? 200 : 503, {
-          status: storage.ok ? 'ok' : 'degraded',
+        const signalingConfigured = hasValidSessionSecret(env.SESSION_SECRET);
+        const healthy = storage.ok && signalingConfigured;
+        return jsonResponse(healthy ? 200 : 503, {
+          status: healthy ? 'ok' : 'degraded',
           storage: storage.ok ? 'ok' : 'unavailable',
-          livekit: env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET ? 'configured' : 'missing',
+          signaling: signalingConfigured ? 'configured' : 'missing',
+          turn: env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN ? 'configured' : 'stun-only',
         });
       } catch (error) {
         console.error('Health check failed', error);
         return jsonResponse(503, { status: 'degraded', storage: 'unavailable' });
       }
+    }
+
+    if (url.pathname.startsWith('/api/') && !hasValidSessionSecret(env.SESSION_SECRET)) {
+      return jsonResponse(503, { error: 'The pairing service is not fully configured.' });
     }
 
     try {
@@ -652,6 +1001,12 @@ export default {
       }
       if (request.method === 'POST' && url.pathname === '/api/session/resume') {
         return await handleResume(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/signal/ticket') {
+        return await handleSignalTicket(request, env);
+      }
+      if (request.method === 'GET' && url.pathname === '/api/signal') {
+        return await handleSignal(request, env);
       }
       return jsonResponse(404, { error: 'Not found.' });
     } catch (error) {

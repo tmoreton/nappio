@@ -43,10 +43,6 @@ export default function PairScreen() {
       setSession({
         role: 'parent',
         roomId: pairing.roomId,
-        token: pairing.parentToken,
-        tokenExpiresAt: pairing.tokenExpiresAt,
-        livekitUrl: pairing.livekitUrl,
-        encryptionKey: pairing.encryptionKey,
         expiresAt: pairing.expiresAt,
         sessionExpiresAt: pairing.sessionExpiresAt,
         recoveryToken: pairing.parentRecoveryToken,

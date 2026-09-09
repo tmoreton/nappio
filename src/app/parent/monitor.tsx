@@ -21,7 +21,7 @@ import { ConnectionStatus } from '@/components/connection-status';
 import { Screen } from '@/components/screen';
 import { palette, radii, spacing } from '@/constants/design';
 import { showMonitoringAudioRoutePicker } from '@/livekit/audio-session';
-import { ParentRoom } from '@/livekit/parent-room';
+import { ParentRoom } from '@/realtime/parent-room';
 import {
   formatBabyDeviceStatus,
   isBabyBatteryLow,
@@ -48,7 +48,6 @@ import {
 } from '@/monitoring/sound-alert-detector';
 import { PairingApiError, resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
-import { hasFreshAccessToken } from '@/state/session-lifecycle';
 import type { MonitorStatus } from '@/types/monitor';
 
 export default function MonitorScreen() {
@@ -65,11 +64,9 @@ export default function MonitorScreen() {
   const [statusClock, setStatusClock] = useState(0);
   const [pipRequest, setPipRequest] = useState(0);
   const [talking, setTalking] = useState(false);
-  const [isRestoringTalk, setIsRestoringTalk] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const appState = useRef(AppState.currentState);
   const talkPressHeld = useRef(false);
-  const talkRecoveryInProgress = useRef(false);
   const pipRequested = useRef(false);
   const connectedOnce = useRef(false);
   const babySeen = useRef(false);
@@ -135,40 +132,9 @@ export default function MonitorScreen() {
     (message: string) => {
       talkPressHeld.current = false;
       setTalking(false);
-
-      if (
-        message.toLowerCase().includes('insufficient permissions') &&
-        parentSession &&
-        !talkRecoveryInProgress.current
-      ) {
-        talkRecoveryInProgress.current = true;
-        setIsRestoringTalk(true);
-        void resumeSession(parentSession.recoveryToken)
-          .then((recovered) => {
-            if (recovered.role !== 'parent') {
-              throw new Error('The saved session belongs to the Baby Unit.');
-            }
-            setSession(recovered);
-            Alert.alert('Push-to-talk ready', 'Room access was refreshed. Hold Talk to try again.');
-          })
-          .catch((reason: unknown) => {
-            Alert.alert(
-              'Push-to-talk unavailable',
-              reason instanceof Error
-                ? reason.message
-                : 'Room access could not be refreshed. Rejoin the recent room and try again.',
-            );
-          })
-          .finally(() => {
-            talkRecoveryInProgress.current = false;
-            setIsRestoringTalk(false);
-          });
-        return;
-      }
-
       Alert.alert('Push-to-talk unavailable', message);
     },
-    [parentSession, setSession],
+    [],
   );
 
   const handleSoundDetected = useCallback(() => {
@@ -216,10 +182,6 @@ export default function MonitorScreen() {
     let cancelled = false;
     const currentSession = parentSession;
     async function prepare() {
-      if (hasFreshAccessToken(currentSession)) {
-        setIsPrepared(true);
-        return;
-      }
       const recovered = await resumeSession(currentSession.recoveryToken);
       if (cancelled) return;
       if (recovered.role !== 'parent') throw new Error('The saved session belongs to the Baby Unit.');
@@ -306,7 +268,7 @@ export default function MonitorScreen() {
   }
 
   async function beginTalking() {
-    if (!babyConnected || isRestoringTalk) return;
+    if (!babyConnected) return;
     talkPressHeld.current = true;
     try {
       let permission = await Camera.getMicrophonePermissionsAsync();
@@ -388,7 +350,7 @@ export default function MonitorScreen() {
       <StatusBar style={settingsVisible ? 'dark' : 'light'} />
       <View style={styles.container}>
         <ParentRoom
-          key={parentSession.token}
+          key={parentSession.recoveryToken}
           session={parentSession}
           audioOnly={audioOnly}
           pipRequest={pipRequest}
@@ -465,8 +427,8 @@ export default function MonitorScreen() {
                 accessibilityHint="Keep this button pressed while you speak"
                 accessibilityLabel={talking ? 'Talking to Baby Unit' : 'Hold to talk to Baby Unit'}
                 accessibilityRole="button"
-                accessibilityState={{ disabled: !babyConnected || isRestoringTalk }}
-                disabled={!babyConnected || isRestoringTalk}
+                accessibilityState={{ disabled: !babyConnected }}
+                disabled={!babyConnected}
                 onAccessibilityAction={(event) => {
                   if (event.nativeEvent.actionName !== 'activate') return;
                   if (talking) stopTalking();
@@ -477,11 +439,11 @@ export default function MonitorScreen() {
                 style={[
                   styles.talkButton,
                   talking && styles.talkButtonActive,
-                  (!babyConnected || isRestoringTalk) && styles.disabledButton,
+                  !babyConnected && styles.disabledButton,
                 ]}>
                 <Text style={[styles.talkIcon, talking && styles.talkTextActive]}>●</Text>
                 <Text numberOfLines={2} style={[styles.controlLabel, styles.talkLabel, talking && styles.talkTextActive]}>
-                  {isRestoringTalk ? 'Restoring…' : talking ? 'Talking…' : 'Hold to talk'}
+                  {talking ? 'Talking…' : 'Hold to talk'}
                 </Text>
               </Pressable>
               <Pressable

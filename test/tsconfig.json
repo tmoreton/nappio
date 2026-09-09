@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts", "../src/monitoring/**/*.ts", "../src/realtime/**/*.ts"],
+  "exclude": []
+}

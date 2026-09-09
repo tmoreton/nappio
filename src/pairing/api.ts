@@ -2,6 +2,7 @@ import { getApiBaseUrl } from '@/config/env';
 import * as Crypto from 'expo-crypto';
 import type {
   CreatePairingResponse,
+  SignalTicketResponse,
   JoinPairingResponse,
   ResumeSessionResponse,
 } from '@/pairing/types';
@@ -57,4 +58,8 @@ export function joinPairing(pairingCode: string, requestId?: string) {
 
 export function resumeSession(recoveryToken: string) {
   return post<ResumeSessionResponse>('/api/session/resume', { recoveryToken });
+}
+
+export function createSignalTicket(recoveryToken: string) {
+  return post<SignalTicketResponse>('/api/signal/ticket', { recoveryToken });
 }

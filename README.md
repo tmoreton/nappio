@@ -1,8 +1,8 @@
 # Nappio
 
-Nappio turns phones into a private baby monitor. The Baby Unit publishes its rear camera and microphone to LiveKit; one or more Parent Units can watch the encrypted stream, talk back, or switch to true audio-only mode for locked-screen listening.
+Nappio turns phones into a private baby monitor. The Baby Unit sends its rear camera and microphone directly to up to three Parent Units over WebRTC; each Parent can watch the encrypted stream, talk back, or switch to true audio-only mode for locked-screen listening.
 
-This repository contains the Expo SDK 57 app, a local TypeScript pairing/token server, and a production Cloudflare Worker. Media travels through LiveKit and is never handled or recorded by the pairing server.
+This repository contains the Expo SDK 57 app and its Cloudflare Worker. The Worker handles temporary pairing and WebSocket signaling. Media normally travels phone-to-phone and uses Cloudflare TURN only when the devices cannot make a direct connection. Nappio never records it.
 
 - Landing page: [tmoreton.github.io/nappio](https://tmoreton.github.io/nappio/)
 - Expo project: [@reactnativenerd/Nappio](https://expo.dev/accounts/reactnativenerd/projects/Nappio)
@@ -15,12 +15,12 @@ The public landing page is implemented as the web-specific home route. A GitHub 
 - screen wake lock and dimmed monitoring view
 - reusable five-minute room invites by six-digit code or QR code
 - QR-code pairing and `nappio://` deep links
-- role-restricted server-generated LiveKit tokens
-- LiveKit E2EE for audio, video, and data frames
+- single-use, role-scoped signaling tickets
+- WebRTC DTLS-SRTP encryption for audio, video, and data
 - Parent Unit remote video and audio playback
 - multiple Parent Units in one room, each with independent session recovery
 - hold-to-talk audio from any Parent Unit to the Baby Unit
-- true audio-only mode that unsubscribes from camera tracks
+- true audio-only mode that stops the Baby Unit's video sender for that Parent
 - automatic audio-only mode when the Parent app backgrounds
 - iOS background-audio capability and native audio-route picker
 - connected, reconnecting, disconnected, unavailable, and failure states
@@ -32,7 +32,7 @@ The public landing page is implemented as the web-specific home route. A GitHub 
 - request size limits, no-store responses, and per-address pairing rate limits
 - a public HTTPS pairing API backed by a SQLite Durable Object
 - automatic expiry cleanup using Durable Object alarms
-- local server tests and Cloudflare-runtime integration tests
+- local protocol tests and Cloudflare-runtime integration tests
 - public privacy/support information and scheduled production health checks
 
 ## Requirements
@@ -41,10 +41,10 @@ The public landing page is implemented as the web-specific home route. A GitHub 
 - Xcode 26.4 or newer for SDK 57 iOS builds
 - two physical iPhones for the main flow; three for multi-parent testing
 - an Apple Developer team for installing development builds on physical devices
-- a LiveKit Cloud project and API key
 - a Cloudflare account for production Worker deployments
+- a Cloudflare Realtime TURN key for reliable connections across restrictive networks
 
-Expo Go cannot run this app because LiveKit requires native WebRTC modules.
+Expo Go cannot run this app because monitoring requires native WebRTC modules.
 
 ## Configure locally
 
@@ -54,16 +54,11 @@ Install dependencies:
 npm install
 ```
 
-Copy the server template and add the LiveKit key and secret. Never put the secret in an `EXPO_PUBLIC_` variable.
+Copy the Worker template. Set a unique `SESSION_SECRET` with at least 32 characters. TURN credentials are optional for local same-network testing.
 
 ```sh
-cp server/.env.example server/.env
-```
-
-The configured project URL is:
-
-```text
-wss://nappio-9a8qy0x7.livekit.cloud
+cp worker/.dev.vars.example worker/.dev.vars
+npm run worker:dev
 ```
 
 Create the app environment file. For physical devices, use the deployed HTTPS pairing service:
@@ -72,7 +67,7 @@ Create the app environment file. For physical devices, use the deployed HTTPS pa
 cp .env.example .env
 ```
 
-Set `EXPO_PUBLIC_API_BASE_URL` to `https://nappio-pairing-api.tmoreton89.workers.dev`. The local TypeScript server remains useful for API development and automated tests, but release and physical-device builds should use HTTPS.
+For a physical device, set `EXPO_PUBLIC_API_BASE_URL` to the deployed HTTPS Worker URL. For a simulator, Wrangler's default local URL is `http://127.0.0.1:8787`; a physical device needs a reachable LAN address or the deployed Worker.
 
 ## Production pairing API
 
@@ -82,29 +77,32 @@ The TestFlight production environment uses:
 https://nappio-pairing-api.tmoreton89.workers.dev
 ```
 
-The Worker stores expiring room invites, hashed session-recovery credentials, and distributed rate limits in a SQLite-backed Cloudflare Durable Object. LiveKit credentials are encrypted Worker secrets and are never compiled into the mobile app. An invite can add multiple Parent Units during its five-minute lifetime, and each resumable session record expires within 24 hours.
+The Worker stores expiring room invites, hashed session-recovery credentials, single-use signaling tickets, and distributed rate limits in a SQLite-backed Cloudflare Durable Object. It relays only WebRTC connection descriptions and candidates over hibernating WebSockets. An invite can add multiple Parent Units during its five-minute lifetime, and each resumable session record expires within 24 hours.
 
-For local Worker development, copy the existing ignored server environment file and start Wrangler:
+For local Worker development:
 
 ```sh
-cp server/.env worker/.dev.vars
+cp worker/.dev.vars.example worker/.dev.vars
 npm run worker:dev
 ```
 
-Deploy code and update the two Worker secrets with:
+Create a TURN key in Cloudflare Realtime, then deploy and set all three Worker secrets. Never put any of them in an `EXPO_PUBLIC_` variable.
 
 ```sh
 npm run worker:deploy
-npx wrangler secret put LIVEKIT_API_KEY --config worker/wrangler.jsonc
-npx wrangler secret put LIVEKIT_API_SECRET --config worker/wrangler.jsonc
+npx wrangler secret put SESSION_SECRET --config worker/wrangler.jsonc
+npx wrangler secret put TURN_KEY_ID --config worker/wrangler.jsonc
+npx wrangler secret put TURN_KEY_API_TOKEN --config worker/wrangler.jsonc
 ```
+
+Without the TURN secrets, the Worker deliberately returns Cloudflare's free STUN server only. That is useful for development, but some carrier, hotel, school, and corporate networks will fail to connect.
 
 ## Run on two physical iPhones
 
-Start the pairing server in one terminal:
+Start the Worker locally in one terminal, or configure the app to use the deployed Worker:
 
 ```sh
-npm run server
+npm run worker:dev
 ```
 
 Build and install the native development client on the first connected iPhone:
@@ -146,7 +144,7 @@ EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
 5. Confirm live video and audio reach the Parent Unit.
 6. While the invite is still visible, join from a second Parent iPhone and confirm the Baby Unit says **2 parents connected** and both receive the stream.
 7. On each Parent Unit, hold **Hold to talk**, speak, and verify the Baby Unit plays audio only while the button is held.
-8. Tap **Audio Only** and verify network video reception stops in the LiveKit session view.
+8. Tap **Audio Only** and verify video network traffic for that Parent falls to zero while audio continues.
 9. Lock the Parent iPhone and listen continuously for at least 30 minutes.
 10. With monitoring alerts enabled, send a test alert, make sustained sound near the Baby Unit, and verify the locked Parent phone receives a sound alert; then disconnect the Baby Unit and verify the interruption warning appears.
 11. Confirm the Baby Unit battery/charging status updates, and verify the low-battery and unplugged alerts.
@@ -158,16 +156,15 @@ EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
 
 ## Security notes
 
-- `server/.env` and all local `.env` variants are ignored by Git.
-- Baby tokens can publish only camera, microphone, and encrypted status data; they subscribe to Parent microphone audio for talk-back.
-- Parent tokens can subscribe and can publish only microphone audio; they cannot publish camera or data tracks.
+- `worker/.dev.vars` and all local `.env` variants are ignored by Git.
+- Recovery credentials authorize only a Baby or Parent signaling role. Single-use signaling tickets expire after 60 seconds.
+- WebRTC encrypts media and control data between devices with DTLS-SRTP. A TURN relay forwards encrypted packets and cannot decode the camera, microphone, or push-to-talk media.
 - Room invites can be reused by multiple Parent Units and expire after five minutes.
 - Each Parent Unit receives a separate recovery token. Role-specific recovery tokens are stored only as SHA-256 hashes by the Worker and expire within 24 hours.
-- E2EE keys are randomly generated per monitoring session and sent only by the pairing API.
-- The local server stores pairing records only in memory; restarting it clears them.
-- The production Worker stores pairing records and rate limits in one SQLite-backed Durable Object so create and claim operations remain atomic across Worker instances.
-- LiveKit token creation completes before a Parent session is stored, so a transient signing failure does not create a broken recovery credential.
-- The public health endpoint reports storage and LiveKit configuration without exposing credentials.
+- Up to three simultaneous Parent signaling connections are allowed. The Baby Unit creates a separate encrypted peer connection for each Parent, trading a small amount of Baby-side upload and battery use for minimal relay cost.
+- The Worker stores pairing records and rate limits in one SQLite-backed Durable Object so create and claim operations remain atomic across Worker instances.
+- TURN credentials are generated server-side and are never compiled into the mobile app.
+- The public health endpoint reports storage, signaling-secret, and TURN configuration without exposing credentials.
 
 ## Launch material
 
