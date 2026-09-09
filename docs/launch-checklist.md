@@ -7,7 +7,7 @@
 - [x] `npm run check` passes lint, TypeScript, protocol tests, and Cloudflare-runtime tests on the WebRTC branch.
 - [x] `npx expo-doctor` reports every project check passing.
 - [x] `EXPO_WEB_BASE_URL=/nappio npx expo export --platform web` succeeds.
-- [x] EAS production build 18 completes for App Store distribution, uploads successfully, and is marked valid by App Store Connect.
+- [x] EAS production build 20 completes for App Store distribution, uploads successfully, and is marked valid and in internal testing by TestFlight.
 - [ ] The release build runs correctly on a 13-inch iPad in portrait and landscape, including a resized iPad window.
 - [ ] The GitHub repository has an `EXPO_TOKEN` Actions secret scoped to the Nappio Expo project.
 - [ ] A push to `main` completes the **Publish Nappio OTA update** workflow and publishes to the `production` channel.
