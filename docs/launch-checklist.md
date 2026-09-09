@@ -12,7 +12,8 @@
 - [ ] The GitHub repository has an `EXPO_TOKEN` Actions secret scoped to the Nappio Expo project.
 - [ ] A push to `main` completes the **Publish Nappio OTA update** workflow and publishes to the `production` channel.
 - [ ] A production build downloads a compatible update, applies it after reopening, and never rolls back to an older update.
-- [ ] The production pairing API health response reports storage, signaling, and TURN configured.
+- [x] The production pairing API health response reports storage, signaling, and TURN configured.
+- [x] A production browser probe exchanges synthetic audio, video, and data over both direct (`host/host`) and forced TURN (`relay/relay`) WebRTC connections.
 - [ ] GitHub Pages contains the current privacy and support sections.
 
 ## Required physical device verification
