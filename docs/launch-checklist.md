@@ -14,7 +14,7 @@
 - [ ] A production build downloads a compatible update, applies it after reopening, and never rolls back to an older update.
 - [ ] The repository contains `CLOUDFLARE_ACCOUNT_ID`, and the GitHub `production` environment contains a narrowly scoped `CLOUDFLARE_API_TOKEN` secret.
 - [ ] The repository contains `CLOUDFLARE_ANALYTICS_TOKEN`, and `TURN_DAILY_EGRESS_WARN_GB` matches the accepted budget.
-- [x] The production pairing API health response reports storage, signaling, and TURN configured.
+- [x] The production pairing API health response reports storage, signaling, TURN, and sharded routing configured.
 - [x] A production browser probe exchanges synthetic audio, video, and data over both direct (`host/host`) and forced TURN (`relay/relay`) WebRTC connections.
 - [ ] GitHub Pages contains the current privacy and support sections.
 
@@ -60,8 +60,8 @@
 
 - [ ] Confirm GitHub Actions notifications reach the person responsible for the app.
 - [ ] Review the scheduled production-health workflow after its first run.
-- [ ] Complete the two-stage legacy-compatible/sharded Worker migration in `docs/production-runbook.md` and retain the compatibility version as the oldest rollback target.
-- [ ] Run the bounded local load probe and a 10-room production lifecycle probe without errors or a p95 regression.
+- [x] Complete the two-stage legacy-compatible/sharded Worker migration in `docs/production-runbook.md` and retain the compatibility version as the oldest rollback target.
+- [x] Run the bounded local load probe and a 10-room production lifecycle probe without errors or a p95 regression.
 - [ ] Review the first scheduled TURN-usage workflow and confirm its failure notification reaches the operator.
 - [ ] Review Cloudflare Worker errors and Realtime TURN usage before widening the beta.
 - [ ] Decide whether to add a crash-reporting provider. None is enabled, so no crash telemetry is collected today.
