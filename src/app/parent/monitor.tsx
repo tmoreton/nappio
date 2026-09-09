@@ -46,12 +46,12 @@ import {
   SOUND_ALERT_SENSITIVITIES,
   type SoundAlertSensitivity,
 } from '@/monitoring/sound-alert-detector';
-import { PairingApiError, resumeSession } from '@/pairing/api';
+import { endSession, PairingApiError, resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
 import type { MonitorStatus } from '@/types/monitor';
 
 export default function MonitorScreen() {
-  const { session, isHydrated, setSession, clearSession } = useMonitorSession();
+  const { session, isHydrated, setSession, refreshSessionExpiry, clearSession } = useMonitorSession();
   const [status, setStatus] = useState<MonitorStatus>('connecting');
   const [babyConnected, setBabyConnected] = useState(false);
   const [audioOnly, setAudioOnly] = useState(false);
@@ -330,6 +330,11 @@ export default function MonitorScreen() {
               label="Pair Again"
               variant="secondary"
               onPress={() => {
+                if (parentSession) {
+                  void endSession(parentSession.recoveryToken).catch((reason: unknown) =>
+                    console.warn('Could not immediately revoke the Parent Unit session.', reason),
+                  );
+                }
                 clearSession();
                 router.replace('/parent/pair');
               }}
@@ -357,6 +362,7 @@ export default function MonitorScreen() {
           talking={talking}
           soundSensitivity={soundSensitivity}
           onStatusChange={handleStatusChange}
+          onSessionRenewed={refreshSessionExpiry}
           onBabyConnectedChange={handleBabyConnectedChange}
           onBabyDeviceStatusChange={handleBabyDeviceStatusChange}
           onSoundDetected={handleSoundDetected}

@@ -200,7 +200,7 @@ export default function LandingPage() {
 
           <section className={styles.legal} id="privacy-policy">
             <div className={styles.legalIntro}>
-              <p className={styles.eyebrow}>PRIVACY POLICY · UPDATED SEPTEMBER 8, 2026</p>
+              <p className={styles.eyebrow}>PRIVACY POLICY · UPDATED SEPTEMBER 9, 2026</p>
               <h2>Private by design, explained plainly.</h2>
               <p>
                 Nappio makes a temporary private room between phones. It does not create accounts, sell personal information, use advertising analytics, or provide recording.
@@ -213,15 +213,15 @@ export default function LandingPage() {
               </article>
               <article>
                 <h3>Temporary pairing data</h3>
-                <p>Cloudflare temporarily stores a random code, room identifier, hashed role-specific recovery credentials, single-use signaling tickets, and expiry times. Codes expire after five minutes and session records within 24 hours. Short-lived network address data is processed to prevent abuse.</p>
+                <p>Cloudflare temporarily stores a random code, room identifier, hashed role-specific recovery credentials, single-use signaling tickets, and expiry times. Codes expire after five minutes. Active session records renew for up to 30 days at a time and are deleted when they expire. A random installation identifier and network address are processed only to prevent abuse.</p>
               </article>
               <article>
                 <h3>Encrypted live media</h3>
-                <p>WebRTC sends encrypted media directly between phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. Nappio does not provide server-side recording. Cloudflare may process connection metadata and operational logs under its privacy and security practices.</p>
+                <p>WebRTC sends encrypted media directly between phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. Nappio does not provide server-side recording. To operate and budget the service, Nappio records whether a Parent connection was direct or relayed and gives TURN a one-way room identifier. Cloudflare may process connection metadata and operational logs under its privacy and security practices.</p>
               </article>
               <article>
                 <h3>On-device storage and deletion</h3>
-                <p>Recovery credentials are protected by iOS Keychain or Android Keystore. Ending monitoring removes the saved credential from that phone. Server session records are automatically removed at expiry.</p>
+                <p>Recovery credentials and a random installation identifier are protected by iOS Keychain or Android Keystore. The identifier is not an Apple advertising identifier and is not used for tracking. Ending a room removes the saved credential and requests immediate server deletion; otherwise server session records are automatically removed at expiry.</p>
               </article>
               <article>
                 <h3>Children and safety</h3>

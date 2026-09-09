@@ -1,0 +1,27 @@
+name: Monitor Cloudflare TURN usage
+
+on:
+  schedule:
+    - cron: '41 9 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: Optional UTC date to inspect (YYYY-MM-DD)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  usage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Read TURN usage
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_ANALYTICS_TOKEN }}
+          TURN_DAILY_EGRESS_WARN_GB: ${{ vars.TURN_DAILY_EGRESS_WARN_GB || '30' }}
+          TURN_USAGE_DATE: ${{ inputs.date }}
+        run: node scripts/check-turn-usage.mjs

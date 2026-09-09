@@ -1,11 +1,21 @@
 type StatsReport = {
+  id?: string;
   type?: string;
   kind?: string;
   mediaType?: string;
   audioLevel?: number;
   totalAudioEnergy?: number;
   totalSamplesDuration?: number;
+  selectedCandidatePairId?: string;
+  localCandidateId?: string;
+  remoteCandidateId?: string;
+  candidateType?: string;
+  nominated?: boolean;
+  selected?: boolean;
+  state?: string;
 };
+
+export type IceTransportKind = 'direct' | 'relay';
 
 export type AudioEnergySample = {
   totalAudioEnergy: number;
@@ -61,6 +71,28 @@ export function iterableStats(stats: unknown): Iterable<unknown> {
     }
   }
   return [];
+}
+
+export function iceTransportFromStats(reports: Iterable<unknown>): IceTransportKind | null {
+  const values = [...reports].filter(
+    (value): value is StatsReport => Boolean(value) && typeof value === 'object',
+  );
+  const byId = new Map(values.map((value) => [value.id, value]));
+  const transport = values.find(
+    (value) => value.type === 'transport' && typeof value.selectedCandidatePairId === 'string',
+  );
+  const selectedPair = transport?.selectedCandidatePairId
+    ? byId.get(transport.selectedCandidatePairId)
+    : values.find(
+        (value) =>
+          value.type === 'candidate-pair' &&
+          (value.selected === true || (value.nominated === true && value.state === 'succeeded')),
+      );
+  if (!selectedPair) return null;
+  const local = selectedPair.localCandidateId ? byId.get(selectedPair.localCandidateId) : undefined;
+  const remote = selectedPair.remoteCandidateId ? byId.get(selectedPair.remoteCandidateId) : undefined;
+  if (!local && !remote) return null;
+  return local?.candidateType === 'relay' || remote?.candidateType === 'relay' ? 'relay' : 'direct';
 }
 
 export function connectionErrorMessage(state: string) {

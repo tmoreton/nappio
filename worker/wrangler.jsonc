@@ -9,8 +9,20 @@
   },
   "vars": {
     "PAIRING_TTL_SECONDS": "300",
-    "SESSION_TTL_SECONDS": "86400"
+    "SESSION_TTL_SECONDS": "2592000",
+    "TURN_TTL_SECONDS": "86400",
+    "SHARDED_PAIRINGS_ENABLED": "true"
   },
+  "ratelimits": [
+    {
+      "name": "PAIRING_RATE_LIMITER",
+      "namespace_id": "1000909",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {

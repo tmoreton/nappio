@@ -28,12 +28,15 @@ The public landing page is implemented as the web-specific home route. A GitHub 
 - adjustable sound-alert sensitivity, a test alert, and time-sensitive iOS notifications
 - Baby Unit battery, charging, and freshness status with low-power alerts
 - manual iOS Picture in Picture for live video
-- 24-hour role-scoped session recovery protected by iOS Keychain or Android Keystore
-- request size limits, no-store responses, and per-address pairing rate limits
+- renewable 30-day role-scoped session recovery protected by iOS Keychain or Android Keystore
+- immediate server-side room/session revocation when a saved session is replaced or ended
+- request size limits, no-store responses, and layered per-installation/per-address pairing rate limits
 - a public HTTPS pairing API backed by a SQLite Durable Object
+- deterministic routing across 100 SQLite Durable Object shards, with legacy-session compatibility
 - automatic expiry cleanup using Durable Object alarms
+- anonymous direct-versus-relay connection telemetry and attributed TURN usage monitoring
 - local protocol tests and Cloudflare-runtime integration tests
-- public privacy/support information and scheduled production health checks
+- public privacy/support information, scheduled production health and TURN-budget checks, and reproducible Worker deployments
 
 ## Requirements
 
@@ -77,7 +80,7 @@ The TestFlight production environment uses:
 https://nappio-pairing-api.tmoreton89.workers.dev
 ```
 
-The Worker stores expiring room invites, hashed session-recovery credentials, single-use signaling tickets, and distributed rate limits in a SQLite-backed Cloudflare Durable Object. It relays only WebRTC connection descriptions and candidates over hibernating WebSockets. An invite can add multiple Parent Units during its five-minute lifetime, and each resumable session record expires within 24 hours.
+The Worker stores expiring room invites, hashed session-recovery credentials, single-use signaling tickets, and short-lived rate limits across 100 deterministically selected SQLite-backed Durable Objects. It relays only WebRTC connection descriptions and candidates over hibernating WebSockets. An invite can add multiple Parent Units during its five-minute lifetime. Each role has an independent 30-day expiry that renews during authenticated use; ending a Baby room revokes the whole room, while replacing a Parent session revokes only that Parent.
 
 For local Worker development:
 
@@ -96,6 +99,8 @@ npx wrangler secret put TURN_KEY_API_TOKEN --config worker/wrangler.jsonc
 ```
 
 Without the TURN secrets, the Worker deliberately returns Cloudflare's free STUN server only. That is useful for development, but some carrier, hotel, school, and corporate networks will fail to connect.
+
+Production deploys are automated by `.github/workflows/worker.yml`. Configure `CLOUDFLARE_ACCOUNT_ID` as a repository secret and a narrowly scoped `CLOUDFLARE_API_TOKEN` in the `production` GitHub environment. Configure `CLOUDFLARE_ANALYTICS_TOKEN` plus the optional `TURN_DAILY_EGRESS_WARN_GB` repository variable for the daily TURN budget check. See [the production runbook](docs/production-runbook.md) for the staged sharding migration, verification, rotation, and rollback procedures.
 
 ## Run on two physical iPhones
 
@@ -133,7 +138,10 @@ Run the full repeatable local verification suite:
 npm run check
 npx expo-doctor
 EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
+npm --prefix worker run deploy -- --dry-run
 ```
+
+For a bounded API load probe, start the local Worker and run `npm run worker:load-test`. The script defaults to 25 rooms, cleans each one up, and refuses to target production unless `ALLOW_PRODUCTION_LOAD_TEST=true` is explicitly set.
 
 ## Physical-device test checklist
 
@@ -160,10 +168,12 @@ EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
 - Recovery credentials authorize only a Baby or Parent signaling role. Single-use signaling tickets expire after 60 seconds.
 - WebRTC encrypts media and control data between devices with DTLS-SRTP. A TURN relay forwards encrypted packets and cannot decode the camera, microphone, or push-to-talk media.
 - Room invites can be reused by multiple Parent Units and expire after five minutes.
-- Each Parent Unit receives a separate recovery token. Role-specific recovery tokens are stored only as SHA-256 hashes by the Worker and expire within 24 hours.
+- Each Parent Unit receives a separate recovery token. Role-specific recovery tokens are stored only as SHA-256 hashes by the Worker and renew for 30 days during active authenticated use.
 - Up to three simultaneous Parent signaling connections are allowed. The Baby Unit creates a separate encrypted peer connection for each Parent, trading a small amount of Baby-side upload and battery use for minimal relay cost.
-- The Worker stores pairing records and rate limits in one SQLite-backed Durable Object so create and claim operations remain atomic across Worker instances.
+- The first two digits of a new pairing code route create/join/signaling operations to one of 100 Durable Object shards. Each shard keeps its own create-and-claim operations atomic. Pre-sharding recovery tokens remain supported until they expire.
+- A random installation UUID and Cloudflare's edge address counter provide layered pairing-abuse limits. The UUID is not an Apple advertising identifier and is not used for tracking.
 - TURN credentials are generated server-side and are never compiled into the mobile app.
+- TURN credentials carry a one-way room attribution identifier. Parent Units report only whether WebRTC selected a direct or relayed path; no room or device identifier is included in that Worker log event.
 - The public health endpoint reports storage, signaling-secret, and TURN configuration without exposing credentials.
 
 ## Launch material

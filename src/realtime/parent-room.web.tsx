@@ -12,6 +12,7 @@ type ParentRoomProps = {
   talking: boolean;
   soundSensitivity: SoundAlertSensitivity;
   onStatusChange: (status: MonitorStatus) => void;
+  onSessionRenewed: (sessionExpiresAt: string) => void;
   onBabyConnectedChange: (connected: boolean) => void;
   onBabyDeviceStatusChange: (status: BabyDeviceStatus) => void;
   onSoundDetected: () => void;

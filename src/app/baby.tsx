@@ -11,13 +11,13 @@ import { PairingCode } from '@/components/pairing-code';
 import { palette, radii, spacing } from '@/constants/design';
 import { BabyRoom } from '@/realtime/baby-room';
 import { useMonitoringKeepAwake } from '@/livekit/use-monitoring-keep-awake';
-import { createPairing, PairingApiError, resumeSession } from '@/pairing/api';
+import { createPairing, endSession, PairingApiError, resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
 import type { MonitorStatus } from '@/types/monitor';
 
 export default function BabyScreen() {
   useMonitoringKeepAwake();
-  const { session, isHydrated, setSession, clearSession } = useMonitorSession();
+  const { session, isHydrated, setSession, refreshSessionExpiry, clearSession } = useMonitorSession();
   const [status, setStatus] = useState<MonitorStatus>('requesting-permissions');
   const [parentCount, setParentCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +88,11 @@ export default function BabyScreen() {
   }, [attempt, clearSession, isHydrated, isPrepared, session, setSession]);
 
   function stopMonitoring() {
+    if (babySession) {
+      void endSession(babySession.recoveryToken).catch((reason: unknown) =>
+        console.warn('Could not immediately revoke the Baby Unit room.', reason),
+      );
+    }
     clearSession();
     router.replace('/');
   }
@@ -145,6 +150,7 @@ export default function BabyScreen() {
         <BabyRoom
           session={babySession}
           onStatusChange={setStatus}
+          onSessionRenewed={refreshSessionExpiry}
           onParentCountChange={setParentCount}
           onError={handleRoomError}
         />

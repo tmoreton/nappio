@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from '@/config/env';
 import * as Crypto from 'expo-crypto';
+import { getClientId } from '@/pairing/client-id';
 import type {
   CreatePairingResponse,
   SignalTicketResponse,
@@ -24,9 +25,14 @@ async function post<T>(path: string, body?: unknown, requestId = Crypto.randomUU
   const timeout = setTimeout(() => controller.abort(), 10_000);
 
   try {
+    const clientId = await getClientId();
     const response = await fetch(`${getApiBaseUrl()}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestId },
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': requestId,
+        'X-Nappio-Client-Id': clientId,
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
@@ -62,4 +68,22 @@ export function resumeSession(recoveryToken: string) {
 
 export function createSignalTicket(recoveryToken: string) {
   return post<SignalTicketResponse>('/api/signal/ticket', { recoveryToken });
+}
+
+export async function endSession(recoveryToken: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/session/end`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recoveryToken }),
+      signal: controller.signal,
+    });
+    if (!response.ok && response.status !== 410) {
+      throw new PairingApiError('The session could not be removed from the pairing server.', response.status);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
 }

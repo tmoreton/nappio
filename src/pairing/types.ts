@@ -33,6 +33,7 @@ export type SignalTicketResponse = {
   roomId: string;
   role: 'baby' | 'parent';
   expiresAt: string;
+  sessionExpiresAt: string;
   signalingUrl: string;
   iceServers: IceServer[];
 };

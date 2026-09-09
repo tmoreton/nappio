@@ -29,6 +29,7 @@ const VIDEO_MAX_FRAMERATE = 15;
 type BabyRoomProps = {
   session: MonitorSession;
   onStatusChange: (status: MonitorStatus) => void;
+  onSessionRenewed: (sessionExpiresAt: string) => void;
   onParentCountChange: (count: number) => void;
   onError: (message: string) => void;
 };
@@ -44,10 +45,12 @@ type ParentPeer = {
 export function BabyRoom({
   session,
   onStatusChange,
+  onSessionRenewed,
   onParentCountChange,
   onError,
 }: BabyRoomProps) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const { recoveryToken, role, roomId } = session;
 
   useEffect(() => {
     let disposed = false;
@@ -260,13 +263,14 @@ export function BabyRoom({
           return;
         }
         setLocalStream(media);
-        signaling = new RealtimeSignalingConnection(session, {
+        signaling = new RealtimeSignalingConnection({ recoveryToken, role, roomId }, {
           onReady: (details) => {
             iceServers = details.iceServers;
             for (const peer of details.peers) {
               if (peer.role === 'parent') void createParentPeer(peer.peerId);
             }
           },
+          onSessionRenewed,
           onMessage: (message) => {
             if (message.type === 'peer-joined' && message.peer.role === 'parent') {
               void createParentPeer(message.peer.peerId);
@@ -327,7 +331,15 @@ export function BabyRoom({
       setLocalStream(null);
       void stopMonitoringAudioSession();
     };
-  }, [onError, onParentCountChange, onStatusChange, session]);
+  }, [
+    onError,
+    onParentCountChange,
+    onSessionRenewed,
+    onStatusChange,
+    recoveryToken,
+    role,
+    roomId,
+  ]);
 
   if (!localStream) return <CameraPlaceholder label="Starting camera and microphone…" />;
   return (

@@ -1,5 +1,8 @@
-import { exports } from 'cloudflare:workers';
+import { env, exports } from 'cloudflare:workers';
+import { runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
+
+const bindings = env as unknown as { PAIRINGS: DurableObjectNamespace };
 
 function post(path: string, body?: unknown, requestId?: string, clientAddress = '203.0.113.10') {
   return exports.default.fetch(`https://nappio.test${path}`, {
@@ -55,6 +58,7 @@ describe('Nappio pairing Worker', () => {
       storage: 'ok',
       signaling: 'configured',
       turn: 'stun-only',
+      routing: 'sharded',
     });
   });
 
@@ -63,7 +67,9 @@ describe('Nappio pairing Worker', () => {
     expect(createdResponse.status).toBe(201);
     const created = (await createdResponse.json()) as Record<string, string>;
     expect(created.pairingCode).toMatch(/^\d{6}$/);
-    expect(created.babyRecoveryToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(created.babyRecoveryToken).toMatch(/^s\d{2}_[A-Za-z0-9_-]{43}$/);
+    expect(created.babyRecoveryToken.slice(1, 3)).toBe(created.pairingCode.slice(0, 2));
+    expect(Date.parse(created.sessionExpiresAt) - Date.now()).toBeGreaterThan(29 * 86_400_000);
     expect(created).not.toHaveProperty('babyToken');
     expect(created).not.toHaveProperty('encryptionKey');
 
@@ -71,7 +77,7 @@ describe('Nappio pairing Worker', () => {
     expect(joinedResponse.status).toBe(200);
     const joined = (await joinedResponse.json()) as Record<string, string>;
     expect(joined.roomId).toBe(created.roomId);
-    expect(joined.parentRecoveryToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(joined.parentRecoveryToken).toMatch(/^s\d{2}_[A-Za-z0-9_-]{43}$/);
     expect(joined).not.toHaveProperty('parentToken');
 
     const resumedResponse = await post('/api/session/resume', {
@@ -82,6 +88,54 @@ describe('Nappio pairing Worker', () => {
     expect(resumed.role).toBe('parent');
     expect(resumed.roomId).toBe(created.roomId);
     expect(resumed.recoveryToken).toBe(joined.parentRecoveryToken);
+  });
+
+  it('keeps pre-sharding invites and recovery tokens working during rollout', async () => {
+    const legacy = bindings.PAIRINGS.getByName('global-pairings');
+    const createdResponse = await legacy.fetch('https://pairings.internal/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rateLimitKey: 'legacy-migration-test',
+        requestId: '55555555-5555-4555-8555-555555555555',
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = (await createdResponse.json()) as Record<string, string>;
+    expect(created.babyRecoveryToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    const joinedResponse = await post('/api/pair/join', { pairingCode: created.pairingCode });
+    expect(joinedResponse.status).toBe(200);
+    const joined = (await joinedResponse.json()) as Record<string, string>;
+    expect(joined.parentRecoveryToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(
+      (await post('/api/session/resume', { recoveryToken: created.babyRecoveryToken })).status,
+    ).toBe(200);
+    expect(
+      (await post('/api/session/resume', { recoveryToken: joined.parentRecoveryToken })).status,
+    ).toBe(200);
+  });
+
+  it('renews routed memberships without rate-limiting authenticated resumes', async () => {
+    const created = (await (await post('/api/pair/create')).json()) as Record<string, string>;
+    const shard = created.babyRecoveryToken.slice(1, 3);
+    const coordinator = bindings.PAIRINGS.getByName(`pairing-shard-v3-${shard}`);
+    await runInDurableObject(coordinator, (_instance, state) => {
+      state.storage.sql.exec(
+        'UPDATE pairings SET session_expires_at = ? WHERE room_id = ?',
+        Date.now() + 86_400_000,
+        created.roomId,
+      );
+    });
+
+    const resumes = await Promise.all(
+      Array.from({ length: 20 }, () =>
+        post('/api/session/resume', { recoveryToken: created.babyRecoveryToken }),
+      ),
+    );
+    expect(resumes.every(({ status }) => status === 200)).toBe(true);
+    const renewed = (await resumes[0]!.json()) as Record<string, string>;
+    expect(Date.parse(renewed.sessionExpiresAt) - Date.now()).toBeGreaterThan(29 * 86_400_000);
   });
 
   it('lets multiple parents join the same active invite', async () => {
@@ -180,6 +234,41 @@ describe('Nappio pairing Worker', () => {
     const response = await post('/api/session/resume', { recoveryToken: 'not-a-token' });
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: 'The saved monitoring session is invalid.' });
+  });
+
+  it('revokes Parent access without ending the Baby room', async () => {
+    const created = (await (await post('/api/pair/create')).json()) as Record<string, string>;
+    const joined = (await (
+      await post('/api/pair/join', { pairingCode: created.pairingCode })
+    ).json()) as Record<string, string>;
+
+    const ended = await post('/api/session/end', {
+      recoveryToken: joined.parentRecoveryToken,
+    });
+    expect(ended.status).toBe(204);
+    expect(
+      (await post('/api/session/resume', { recoveryToken: joined.parentRecoveryToken })).status,
+    ).toBe(410);
+    expect(
+      (await post('/api/session/resume', { recoveryToken: created.babyRecoveryToken })).status,
+    ).toBe(200);
+  });
+
+  it('ends an entire room when the Baby Unit revokes it', async () => {
+    const created = (await (await post('/api/pair/create')).json()) as Record<string, string>;
+    const joined = (await (
+      await post('/api/pair/join', { pairingCode: created.pairingCode })
+    ).json()) as Record<string, string>;
+
+    expect(
+      (await post('/api/session/end', { recoveryToken: created.babyRecoveryToken })).status,
+    ).toBe(204);
+    expect(
+      (await post('/api/session/resume', { recoveryToken: created.babyRecoveryToken })).status,
+    ).toBe(410);
+    expect(
+      (await post('/api/session/resume', { recoveryToken: joined.parentRecoveryToken })).status,
+    ).toBe(410);
   });
 
   it('issues single-use signaling tickets and relays only across room roles', async () => {

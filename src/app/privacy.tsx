@@ -13,15 +13,15 @@ const sections = [
   },
   {
     title: 'Pairing and session data',
-    body: 'The Cloudflare pairing service temporarily stores a random pairing code, room identifier, hashed role-specific recovery credentials, single-use signaling tickets, and expiry times. Pairing codes expire after five minutes. Session records expire within 24 hours. Short-lived network address data is processed for abuse prevention.',
+    body: 'The Cloudflare pairing service temporarily stores a random pairing code, room identifier, hashed role-specific recovery credentials, single-use signaling tickets, and expiry times. Pairing codes expire after five minutes. Active session records renew for up to 30 days at a time and are deleted when they expire. A random installation identifier and network address are processed only to prevent abuse.',
   },
   {
     title: 'Live audio and video',
-    body: 'WebRTC sends encrypted audio and video directly between the phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. Nappio does not provide server-side recording. Cloudflare may process connection metadata and operational logs under its privacy and security practices.',
+    body: 'WebRTC sends encrypted audio and video directly between the phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. Nappio does not provide server-side recording. To operate and budget the service, Nappio records whether a Parent connection was direct or relayed and gives TURN a one-way room identifier. Cloudflare may process connection metadata and operational logs under its privacy and security practices.',
   },
   {
     title: 'Storage and deletion',
-    body: 'The phone stores its recovery credential in iOS Keychain or Android Keystore so a session can survive an app restart. Ending monitoring removes the saved credential from that phone. Server session records are automatically removed at expiry.',
+    body: 'The phone stores its recovery credential and random installation identifier in iOS Keychain or Android Keystore. The identifier is not an Apple advertising identifier and is not used for tracking. Ending a room removes the saved credential and requests immediate server deletion; otherwise server session records are automatically removed at expiry.',
   },
   {
     title: 'Children and safety',
@@ -34,7 +34,7 @@ export default function PrivacyScreen() {
     <>
       <Stack.Screen options={{ title: 'Privacy' }} />
       <Screen edges={['bottom', 'left', 'right']} scroll contentStyle={styles.content}>
-        <Text style={styles.eyebrow}>LAST UPDATED SEPTEMBER 8, 2026</Text>
+        <Text style={styles.eyebrow}>LAST UPDATED SEPTEMBER 9, 2026</Text>
         <Text style={styles.title}>Privacy, in plain language.</Text>
         <Text style={styles.intro}>
           Nappio is designed to make a temporary private room between phones with as little retained data as possible.

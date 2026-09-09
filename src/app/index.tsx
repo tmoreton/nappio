@@ -6,7 +6,7 @@ import { ActionButton } from '@/components/action-button';
 import { BrandMark } from '@/components/brand-mark';
 import { Screen } from '@/components/screen';
 import { palette, spacing, type } from '@/constants/design';
-import { resumeSession } from '@/pairing/api';
+import { endSession, resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
 import { hasCompletedOnboarding } from '@/state/onboarding-storage';
 
@@ -41,7 +41,16 @@ export default function HomeScreen() {
       const message = reason instanceof Error ? reason.message : 'The saved session could not be restored.';
       Alert.alert('Could not continue', message, [
         { text: 'Keep for retry', style: 'cancel' },
-        { text: 'Remove session', style: 'destructive', onPress: clearSession },
+        {
+          text: 'Remove session',
+          style: 'destructive',
+          onPress: () => {
+            void endSession(session.recoveryToken).catch((reason: unknown) =>
+              console.warn('Could not immediately revoke the saved monitoring session.', reason),
+            );
+            clearSession();
+          },
+        },
       ]);
     } finally {
       setIsResuming(false);
@@ -49,11 +58,21 @@ export default function HomeScreen() {
   }
 
   function startBabyCamera() {
+    if (session) {
+      void endSession(session.recoveryToken).catch((reason: unknown) =>
+        console.warn('Could not immediately revoke the previous monitoring session.', reason),
+      );
+    }
     clearSession();
     router.push('/baby');
   }
 
   function startParentMonitor() {
+    if (session) {
+      void endSession(session.recoveryToken).catch((reason: unknown) =>
+        console.warn('Could not immediately revoke the previous monitoring session.', reason),
+      );
+    }
     clearSession();
     router.push('/parent/pair');
   }

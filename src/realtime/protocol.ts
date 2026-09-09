@@ -34,13 +34,18 @@ export type RealtimeServerMessage =
   | { type: 'peer-unavailable'; peerId: string }
   | { type: 'error'; error: string };
 
-export type RealtimeClientSignal = {
-  type: 'signal';
-  targetPeerId: string;
-  connectionId: string;
-  description?: RealtimeSessionDescription;
-  candidate?: RealtimeIceCandidate;
-};
+export type RealtimeClientSignal =
+  | {
+      type: 'signal';
+      targetPeerId: string;
+      connectionId: string;
+      description?: RealtimeSessionDescription;
+      candidate?: RealtimeIceCandidate;
+    }
+  | {
+      type: 'connection-report';
+      transport: 'direct' | 'relay';
+    };
 
 export type RealtimeConnectionDetails = {
   iceServers: IceServer[];

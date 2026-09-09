@@ -19,6 +19,7 @@ jobs:
           test "$(jq -r '.storage' <<< "$response")" = "ok"
           test "$(jq -r '.signaling' <<< "$response")" = "configured"
           test "$(jq -r '.turn' <<< "$response")" = "configured"
+          test "$(jq -r '.routing' <<< "$response")" = "sharded"
       - name: Check public support and privacy page
         run: |
           page=$(curl --fail --silent --show-error --retry 3 --retry-delay 5 https://tmoreton.github.io/nappio/)

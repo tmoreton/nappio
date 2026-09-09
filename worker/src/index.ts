@@ -2,11 +2,14 @@ import { DurableObject } from 'cloudflare:workers';
 
 type Env = {
   PAIRINGS: DurableObjectNamespace;
+  PAIRING_RATE_LIMITER?: RateLimit;
   SESSION_SECRET: string;
   TURN_KEY_ID?: string;
   TURN_KEY_API_TOKEN?: string;
   PAIRING_TTL_SECONDS: string;
   SESSION_TTL_SECONDS: string;
+  TURN_TTL_SECONDS?: string;
+  SHARDED_PAIRINGS_ENABLED?: string;
 };
 
 type ParticipantRole = 'baby' | 'parent';
@@ -25,14 +28,17 @@ type PairingRow = {
 
 type ParentSessionRow = PairingRow & {
   parentRecoveryHash: string;
+  parentSessionExpiresAt: number;
   claimRequestId: string;
 };
 
 type InternalRequest = {
   clientAddress?: string;
+  rateLimitKey?: string;
   pairingCode?: string;
   recoveryToken?: string;
   requestId?: string;
+  shard?: string;
 };
 
 type IceServer = {
@@ -50,9 +56,15 @@ type SignalSocketAttachment = {
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LEGACY_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const ROUTED_TOKEN_PATTERN = /^s(\d{2})_([A-Za-z0-9_-]{43})$/;
+const PAIRING_CODE_PATTERN = /^\d{6}$/;
+const SHARD_PATTERN = /^\d{2}$/;
+const SHARD_COUNT = 100;
+const SESSION_RENEWAL_MINIMUM_MS = 12 * 60 * 60 * 1000;
 
 const responseHeaders = {
-  'Access-Control-Allow-Headers': 'Content-Type, Idempotency-Key',
+  'Access-Control-Allow-Headers': 'Content-Type, Idempotency-Key, X-Nappio-Client-Id',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   'Access-Control-Allow-Origin': '*',
   'Cache-Control': 'no-store',
@@ -77,6 +89,10 @@ function hasValidSessionSecret(secret: string | undefined) {
   return typeof secret === 'string' && secret.trim().length >= 32;
 }
 
+function shardedPairingsEnabled(env: Env) {
+  return env.SHARDED_PAIRINGS_ENABLED === 'true';
+}
+
 function sessionSecret(env: Env) {
   if (!hasValidSessionSecret(env.SESSION_SECRET)) {
     throw new Error('SESSION_SECRET must contain at least 32 characters.');
@@ -92,9 +108,10 @@ function randomBase64Url(byteLength: number) {
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
-function randomPairingCode() {
+function randomPairingCode(shard?: string) {
   const value = new Uint32Array(1);
   crypto.getRandomValues(value);
+  if (shard) return `${shard}${String(value[0]! % 10_000).padStart(4, '0')}`;
   return String(value[0]! % 1_000_000).padStart(6, '0');
 }
 
@@ -110,7 +127,28 @@ async function hashRecoveryToken(token: string) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-async function recoveryTokenFor(role: ParticipantRole, requestId: string, secret: string) {
+function shardForRequestId(requestId: string) {
+  return String(Number.parseInt(requestId.slice(0, 8), 16) % SHARD_COUNT).padStart(2, '0');
+}
+
+function shardFromPairingCode(pairingCode: string) {
+  return PAIRING_CODE_PATTERN.test(pairingCode) ? pairingCode.slice(0, 2) : undefined;
+}
+
+function shardFromToken(token: string) {
+  return token.match(ROUTED_TOKEN_PATTERN)?.[1];
+}
+
+function isSessionToken(token: string) {
+  return LEGACY_TOKEN_PATTERN.test(token) || ROUTED_TOKEN_PATTERN.test(token);
+}
+
+async function recoveryTokenFor(
+  role: ParticipantRole,
+  requestId: string,
+  secret: string,
+  shard?: string,
+) {
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
@@ -119,11 +157,16 @@ async function recoveryTokenFor(role: ParticipantRole, requestId: string, secret
     ['sign'],
   );
   const signature = new Uint8Array(
-    await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${role}:${requestId}`)),
+    await crypto.subtle.sign(
+      'HMAC',
+      key,
+      new TextEncoder().encode(shard ? `v3:${shard}:${role}:${requestId}` : `${role}:${requestId}`),
+    ),
   );
   let binary = '';
   for (const byte of signature) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  const token = btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  return shard ? `s${shard}_${token}` : token;
 }
 
 async function readJson(request: Request) {
@@ -132,26 +175,57 @@ async function readJson(request: Request) {
   return text ? (JSON.parse(text) as Record<string, unknown>) : {};
 }
 
-function coordinator(env: Env) {
+function legacyCoordinator(env: Env) {
   return env.PAIRINGS.getByName('global-pairings');
+}
+
+function coordinatorForShard(env: Env, shard: string) {
+  if (!SHARD_PATTERN.test(shard)) throw new Error('Invalid pairing shard.');
+  return env.PAIRINGS.getByName(`pairing-shard-v3-${shard}`);
+}
+
+function coordinatorForToken(env: Env, token: string) {
+  const shard = shardFromToken(token);
+  return shard ? coordinatorForShard(env, shard) : legacyCoordinator(env);
 }
 
 async function coordinatorRequest(
   env: Env,
-  path: '/create' | '/claim' | '/resume' | '/signal-ticket' | '/health',
+  coordinator: DurableObjectStub,
+  path: '/create' | '/claim' | '/resume' | '/signal-ticket' | '/end' | '/health',
   payload?: InternalRequest,
 ) {
-  return coordinator(env).fetch(`https://pairings.internal${path}`, {
+  return coordinator.fetch(`https://pairings.internal${path}`, {
     method: payload ? 'POST' : 'GET',
     headers: payload ? { 'Content-Type': 'application/json' } : undefined,
     body: payload ? JSON.stringify(payload) : undefined,
   });
 }
 
+function clientRateLimitKey(request: Request) {
+  const clientId = request.headers.get('X-Nappio-Client-Id')?.trim();
+  if (clientId && UUID_PATTERN.test(clientId)) return `client:${clientId}`;
+  return `legacy-ip:${request.headers.get('CF-Connecting-IP') ?? 'unknown'}`;
+}
+
+async function enforceEdgePairingLimit(request: Request, env: Env) {
+  if (!env.PAIRING_RATE_LIMITER) return true;
+  const clientAddress = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const result = await env.PAIRING_RATE_LIMITER.limit({ key: `pairing:${clientAddress}` });
+  return result.success;
+}
+
 async function handleCreate(request: Request, env: Env) {
-  const internal = await coordinatorRequest(env, '/create', {
-    clientAddress: request.headers.get('CF-Connecting-IP') ?? 'unknown',
-    requestId: requestIdFrom(request),
+  if (!(await enforceEdgePairingLimit(request, env))) {
+    return jsonResponse(429, { error: 'Too many pairing attempts. Wait a minute and try again.' });
+  }
+  const requestId = requestIdFrom(request);
+  const shard = shardedPairingsEnabled(env) ? shardForRequestId(requestId) : undefined;
+  const coordinator = shard ? coordinatorForShard(env, shard) : legacyCoordinator(env);
+  const internal = await coordinatorRequest(env, coordinator, '/create', {
+    rateLimitKey: clientRateLimitKey(request),
+    requestId,
+    shard,
   });
   const payload = (await internal.json()) as Record<string, unknown>;
   return jsonResponse(internal.status, payload);
@@ -164,24 +238,43 @@ async function handleJoin(request: Request, env: Env) {
     return jsonResponse(400, { error: 'Enter a valid six-digit pairing code.' });
   }
 
-  const internal = await coordinatorRequest(env, '/claim', {
-    clientAddress: request.headers.get('CF-Connecting-IP') ?? 'unknown',
+  if (!(await enforceEdgePairingLimit(request, env))) {
+    return jsonResponse(429, { error: 'Too many pairing attempts. Wait a minute and try again.' });
+  }
+  const shard = shardFromPairingCode(pairingCode)!;
+  const payload = {
+    rateLimitKey: clientRateLimitKey(request),
     pairingCode,
     requestId: requestIdFrom(request),
-  });
-  const payload = (await internal.json()) as Record<string, unknown>;
-  return jsonResponse(internal.status, payload);
+    shard,
+  };
+  let internal = await coordinatorRequest(
+    env,
+    coordinatorForShard(env, shard),
+    '/claim',
+    payload,
+  );
+
+  // Invites issued by the pre-sharding Worker can remain visible for up to five
+  // minutes during deployment. Let those drain through the legacy coordinator.
+  if (internal.status === 404) {
+    internal = await coordinatorRequest(env, legacyCoordinator(env), '/claim', {
+      ...payload,
+      shard: undefined,
+    });
+  }
+  const response = (await internal.json()) as Record<string, unknown>;
+  return jsonResponse(internal.status, response);
 }
 
 async function handleResume(request: Request, env: Env) {
   const body = await readJson(request);
   const recoveryToken = typeof body.recoveryToken === 'string' ? body.recoveryToken : '';
-  if (!/^[A-Za-z0-9_-]{43}$/.test(recoveryToken)) {
+  if (!isSessionToken(recoveryToken)) {
     return jsonResponse(400, { error: 'The saved monitoring session is invalid.' });
   }
 
-  const internal = await coordinatorRequest(env, '/resume', {
-    clientAddress: request.headers.get('CF-Connecting-IP') ?? 'unknown',
+  const internal = await coordinatorRequest(env, coordinatorForToken(env, recoveryToken), '/resume', {
     recoveryToken,
   });
   const payload = (await internal.json()) as Record<string, unknown>;
@@ -195,7 +288,15 @@ function signalingUrlFor(request: Request, ticket: string) {
   return url.toString();
 }
 
-async function generateIceServers(env: Env): Promise<IceServer[]> {
+async function turnAttributionId(roomId: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(roomId));
+  const id = Array.from(new Uint8Array(digest).slice(0, 12), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+  return `room-${id}`;
+}
+
+async function generateIceServers(env: Env, roomId: string): Promise<IceServer[]> {
   if (!env.TURN_KEY_ID || !env.TURN_KEY_API_TOKEN) {
     return [{ urls: ['stun:stun.cloudflare.com:3478'] }];
   }
@@ -208,7 +309,10 @@ async function generateIceServers(env: Env): Promise<IceServer[]> {
         Authorization: `Bearer ${env.TURN_KEY_API_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ ttl: 86_400 }),
+      body: JSON.stringify({
+        ttl: positiveInteger(env.TURN_TTL_SECONDS, 86_400, 'TURN_TTL_SECONDS'),
+        customIdentifier: await turnAttributionId(roomId),
+      }),
     },
   );
   if (!response.ok) throw new Error('TURN credentials could not be generated.');
@@ -231,21 +335,42 @@ async function generateIceServers(env: Env): Promise<IceServer[]> {
 async function handleSignalTicket(request: Request, env: Env) {
   const body = await readJson(request);
   const recoveryToken = typeof body.recoveryToken === 'string' ? body.recoveryToken : '';
-  if (!/^[A-Za-z0-9_-]{43}$/.test(recoveryToken)) {
+  if (!isSessionToken(recoveryToken)) {
     return jsonResponse(400, { error: 'The saved monitoring session is invalid.' });
   }
 
-  const internal = await coordinatorRequest(env, '/signal-ticket', { recoveryToken });
+  const internal = await coordinatorRequest(
+    env,
+    coordinatorForToken(env, recoveryToken),
+    '/signal-ticket',
+    { recoveryToken },
+  );
   const payload = (await internal.json()) as Record<string, unknown>;
   if (!internal.ok) return jsonResponse(internal.status, payload);
   const ticket = typeof payload.ticket === 'string' ? payload.ticket : '';
   const roomId = typeof payload.roomId === 'string' ? payload.roomId : '';
-  const iceServers = await generateIceServers(env);
+  const iceServers = await generateIceServers(env, roomId);
   return jsonResponse(201, {
     ...payload,
     signalingUrl: signalingUrlFor(request, ticket),
     iceServers,
   });
+}
+
+async function handleEndSession(request: Request, env: Env) {
+  const body = await readJson(request);
+  const recoveryToken = typeof body.recoveryToken === 'string' ? body.recoveryToken : '';
+  if (!isSessionToken(recoveryToken)) {
+    return jsonResponse(400, { error: 'The saved monitoring session is invalid.' });
+  }
+  const internal = await coordinatorRequest(
+    env,
+    coordinatorForToken(env, recoveryToken),
+    '/end',
+    { recoveryToken },
+  );
+  if (internal.status === 204) return new Response(null, { status: 204, headers: responseHeaders });
+  return jsonResponse(internal.status, await internal.json());
 }
 
 function handleSignal(request: Request, env: Env) {
@@ -254,12 +379,12 @@ function handleSignal(request: Request, env: Env) {
   }
   const source = new URL(request.url);
   const ticket = source.searchParams.get('ticket') ?? '';
-  if (!/^[A-Za-z0-9_-]{43}$/.test(ticket)) {
+  if (!isSessionToken(ticket)) {
     return jsonResponse(401, { error: 'The signaling ticket is invalid.' });
   }
   const internalUrl = new URL('https://pairings.internal/signal');
   internalUrl.searchParams.set('ticket', ticket);
-  return coordinator(env).fetch(internalUrl.toString(), {
+  return coordinatorForToken(env, ticket).fetch(internalUrl.toString(), {
     headers: { Upgrade: 'websocket' },
   });
 }
@@ -320,7 +445,8 @@ export class PairingCoordinator extends DurableObject<Env> {
       CREATE TABLE IF NOT EXISTS parent_sessions (
         recovery_hash TEXT PRIMARY KEY,
         pairing_code TEXT NOT NULL,
-        claim_request_id TEXT NOT NULL UNIQUE
+        claim_request_id TEXT NOT NULL UNIQUE,
+        session_expires_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS parent_sessions_pairing_code
         ON parent_sessions (pairing_code);
@@ -328,6 +454,25 @@ export class PairingCoordinator extends DurableObject<Env> {
         SELECT parent_recovery_hash, pairing_code, claim_request_id
         FROM pairings
         WHERE parent_recovery_hash IS NOT NULL AND claim_request_id IS NOT NULL;
+    `);
+    const parentColumns = new Set(
+      this.ctx.storage.sql
+        .exec<{ name: string }>('PRAGMA table_info(parent_sessions)')
+        .toArray()
+        .map(({ name }) => name),
+    );
+    if (!parentColumns.has('session_expires_at')) {
+      this.ctx.storage.sql.exec('ALTER TABLE parent_sessions ADD COLUMN session_expires_at INTEGER');
+    }
+    this.ctx.storage.sql.exec(`
+      UPDATE parent_sessions
+      SET session_expires_at = (
+        SELECT session_expires_at FROM pairings
+        WHERE pairings.pairing_code = parent_sessions.pairing_code
+      )
+      WHERE session_expires_at IS NULL;
+      CREATE INDEX IF NOT EXISTS parent_sessions_expires_at
+        ON parent_sessions (session_expires_at);
     `);
   }
 
@@ -396,7 +541,8 @@ export class PairingCoordinator extends DurableObject<Env> {
       .exec<ParentSessionRow>(
         `SELECT p.pairing_code AS pairingCode, p.room_id AS roomId,
                 p.expires_at AS expiresAt,
-                p.session_expires_at AS sessionExpiresAt, p.claimed,
+                p.session_expires_at AS sessionExpiresAt,
+                s.session_expires_at AS parentSessionExpiresAt, p.claimed,
                 p.baby_recovery_hash AS babyRecoveryHash,
                 s.recovery_hash AS parentRecoveryHash,
                 p.create_request_id AS createRequestId,
@@ -414,16 +560,18 @@ export class PairingCoordinator extends DurableObject<Env> {
       .exec<ParentSessionRow>(
         `SELECT p.pairing_code AS pairingCode, p.room_id AS roomId,
                 p.expires_at AS expiresAt,
-                p.session_expires_at AS sessionExpiresAt, p.claimed,
+                p.session_expires_at AS sessionExpiresAt,
+                s.session_expires_at AS parentSessionExpiresAt, p.claimed,
                 p.baby_recovery_hash AS babyRecoveryHash,
                 s.recovery_hash AS parentRecoveryHash,
                 p.create_request_id AS createRequestId,
                 s.claim_request_id AS claimRequestId
          FROM parent_sessions s
          JOIN pairings p ON p.pairing_code = s.pairing_code
-         WHERE s.recovery_hash = ? AND p.session_expires_at > ?
+         WHERE s.recovery_hash = ? AND p.session_expires_at > ? AND s.session_expires_at > ?
          LIMIT 1`,
         recoveryHash,
+        Date.now(),
         Date.now(),
       )
       .toArray()[0];
@@ -431,6 +579,7 @@ export class PairingCoordinator extends DurableObject<Env> {
 
   private purgeExpiredSessions(now: number) {
     this.ctx.storage.sql.exec('DELETE FROM signal_tickets WHERE expires_at <= ?', now);
+    this.ctx.storage.sql.exec('DELETE FROM parent_sessions WHERE session_expires_at <= ?', now);
     this.ctx.storage.sql.exec(
       `DELETE FROM parent_sessions
        WHERE pairing_code IN (
@@ -442,24 +591,39 @@ export class PairingCoordinator extends DurableObject<Env> {
   }
 
   private async scheduleCleanup(sessionExpiresAt?: number) {
-    const nextStored = this.ctx.storage.sql
+    const nextBaby = this.ctx.storage.sql
       .exec<{ expiresAt: number }>(
         'SELECT MIN(session_expires_at) AS expiresAt FROM pairings WHERE session_expires_at > ?',
         Date.now(),
       )
       .toArray()[0]?.expiresAt;
-    const next = Math.min(sessionExpiresAt ?? Number.POSITIVE_INFINITY, nextStored ?? Number.POSITIVE_INFINITY);
+    const nextParent = this.ctx.storage.sql
+      .exec<{ expiresAt: number }>(
+        'SELECT MIN(session_expires_at) AS expiresAt FROM parent_sessions WHERE session_expires_at > ?',
+        Date.now(),
+      )
+      .toArray()[0]?.expiresAt;
+    const next = Math.min(
+      sessionExpiresAt ?? Number.POSITIVE_INFINITY,
+      nextBaby ?? Number.POSITIVE_INFINITY,
+      nextParent ?? Number.POSITIVE_INFINITY,
+    );
     if (!Number.isFinite(next)) return;
     const current = await this.ctx.storage.getAlarm();
     if (current === null || next < current) await this.ctx.storage.setAlarm(next);
   }
 
-  private async createPairing(requestId: string) {
+  private async createPairing(requestId: string, shard?: string) {
     const now = Date.now();
     this.purgeExpiredSessions(now);
     const existing = this.rowForCreateRequest(requestId);
     if (existing) {
-      const babyRecoveryToken = await recoveryTokenFor('baby', requestId, sessionSecret(this.env));
+      const babyRecoveryToken = await recoveryTokenFor(
+        'baby',
+        requestId,
+        sessionSecret(this.env),
+        shard,
+      );
       return {
         pairingCode: existing.pairingCode,
         roomId: existing.roomId,
@@ -475,9 +639,14 @@ export class PairingCoordinator extends DurableObject<Env> {
       now + positiveInteger(this.env.SESSION_TTL_SECONDS, 86_400, 'SESSION_TTL_SECONDS') * 1000;
 
     for (let attempt = 0; attempt < 20; attempt += 1) {
-      const pairingCode = randomPairingCode();
+      const pairingCode = randomPairingCode(shard);
       const roomId = `monitor-${crypto.randomUUID()}`;
-      const babyRecoveryToken = await recoveryTokenFor('baby', requestId, sessionSecret(this.env));
+      const babyRecoveryToken = await recoveryTokenFor(
+        'baby',
+        requestId,
+        sessionSecret(this.env),
+        shard,
+      );
       const babyRecoveryHash = await hashRecoveryToken(babyRecoveryToken);
       const inserted = this.ctx.storage.sql
         .exec<{ pairingCode: string }>(
@@ -532,24 +701,27 @@ export class PairingCoordinator extends DurableObject<Env> {
     return jsonResponse(409, { error: `Pairing code ${pairingCode} could not be claimed.` });
   }
 
-  private async claimPairing(pairingCode: string, requestId: string) {
+  private async claimPairing(pairingCode: string, requestId: string, shard?: string) {
     const replay = this.rowForClaimRequest(requestId);
     if (replay) {
       if (replay.pairingCode !== pairingCode) {
         return jsonResponse(409, { error: 'That request was already used for another pairing code.' });
       }
-      if (replay.sessionExpiresAt <= Date.now()) {
+      if (replay.sessionExpiresAt <= Date.now() || replay.parentSessionExpiresAt <= Date.now()) {
         return jsonResponse(410, { error: 'The saved monitoring session is no longer available.' });
       }
       const parentRecoveryToken = await recoveryTokenFor(
         'parent',
         requestId,
         sessionSecret(this.env),
+        shard,
       );
       return jsonResponse(200, {
         roomId: replay.roomId,
         expiresAt: new Date(replay.expiresAt).toISOString(),
-        sessionExpiresAt: new Date(replay.sessionExpiresAt).toISOString(),
+        sessionExpiresAt: new Date(
+          Math.min(replay.sessionExpiresAt, replay.parentSessionExpiresAt),
+        ).toISOString(),
         parentRecoveryToken,
       });
     }
@@ -559,12 +731,18 @@ export class PairingCoordinator extends DurableObject<Env> {
       return this.pairingFailure(row, pairingCode);
     }
 
-    const parentRecoveryToken = await recoveryTokenFor('parent', requestId, sessionSecret(this.env));
+    const parentRecoveryToken = await recoveryTokenFor(
+      'parent',
+      requestId,
+      sessionSecret(this.env),
+      shard,
+    );
     const parentRecoveryHash = await hashRecoveryToken(parentRecoveryToken);
     const inserted = this.ctx.storage.sql
       .exec<{ pairingCode: string }>(
-        `INSERT OR IGNORE INTO parent_sessions (recovery_hash, pairing_code, claim_request_id)
-         SELECT ?, pairing_code, ? FROM pairings
+        `INSERT OR IGNORE INTO parent_sessions
+         (recovery_hash, pairing_code, claim_request_id, session_expires_at)
+         SELECT ?, pairing_code, ?, session_expires_at FROM pairings
          WHERE pairing_code = ? AND expires_at > ?
          RETURNING pairing_code AS pairingCode`,
         parentRecoveryHash,
@@ -579,7 +757,12 @@ export class PairingCoordinator extends DurableObject<Env> {
         return jsonResponse(200, {
           roomId: concurrentReplay.roomId,
           expiresAt: new Date(concurrentReplay.expiresAt).toISOString(),
-          sessionExpiresAt: new Date(concurrentReplay.sessionExpiresAt).toISOString(),
+          sessionExpiresAt: new Date(
+            Math.min(
+              concurrentReplay.sessionExpiresAt,
+              concurrentReplay.parentSessionExpiresAt,
+            ),
+          ).toISOString(),
           parentRecoveryToken,
         });
       }
@@ -596,6 +779,85 @@ export class PairingCoordinator extends DurableObject<Env> {
       sessionExpiresAt: new Date(row.sessionExpiresAt).toISOString(),
       parentRecoveryToken,
     });
+  }
+
+  private async renewMembership(
+    recoveryHash: string,
+    role: ParticipantRole,
+    currentExpiresAt: number,
+    recoveryToken: string,
+  ) {
+    if (!shardFromToken(recoveryToken)) return currentExpiresAt;
+    const nextExpiresAt =
+      Date.now() +
+      positiveInteger(this.env.SESSION_TTL_SECONDS, 2_592_000, 'SESSION_TTL_SECONDS') * 1000;
+    if (nextExpiresAt - currentExpiresAt < SESSION_RENEWAL_MINIMUM_MS) {
+      return currentExpiresAt;
+    }
+    if (role === 'baby') {
+      this.ctx.storage.sql.exec(
+        'UPDATE pairings SET session_expires_at = ? WHERE baby_recovery_hash = ?',
+        nextExpiresAt,
+        recoveryHash,
+      );
+      const room = this.ctx.storage.sql
+        .exec<{ roomId: string }>(
+          'SELECT room_id AS roomId FROM pairings WHERE baby_recovery_hash = ?',
+          recoveryHash,
+        )
+        .toArray()[0];
+      if (room) {
+        for (const socket of this.roomSockets(room.roomId)) {
+          const attachment = this.attachmentFor(socket);
+          if (!attachment) continue;
+          if (attachment.role === 'baby' && attachment.recoveryHash === recoveryHash) {
+            socket.serializeAttachment({ ...attachment, sessionExpiresAt: nextExpiresAt });
+            continue;
+          }
+          if (attachment.role === 'parent') {
+            const parent = this.ctx.storage.sql
+              .exec<{ sessionExpiresAt: number }>(
+                'SELECT session_expires_at AS sessionExpiresAt FROM parent_sessions WHERE recovery_hash = ?',
+                attachment.recoveryHash,
+              )
+              .toArray()[0];
+            if (parent) {
+              socket.serializeAttachment({
+                ...attachment,
+                sessionExpiresAt: Math.min(nextExpiresAt, parent.sessionExpiresAt),
+              });
+            }
+          }
+        }
+      }
+    } else {
+      this.ctx.storage.sql.exec(
+        'UPDATE parent_sessions SET session_expires_at = ? WHERE recovery_hash = ?',
+        nextExpiresAt,
+        recoveryHash,
+      );
+      const room = this.ctx.storage.sql
+        .exec<{ babySessionExpiresAt: number; roomId: string }>(
+          `SELECT p.room_id AS roomId, p.session_expires_at AS babySessionExpiresAt
+           FROM parent_sessions s
+           JOIN pairings p ON p.pairing_code = s.pairing_code
+           WHERE s.recovery_hash = ?`,
+          recoveryHash,
+        )
+        .toArray()[0];
+      if (room) {
+        for (const socket of this.roomSockets(room.roomId)) {
+          const attachment = this.attachmentFor(socket);
+          if (attachment?.recoveryHash !== recoveryHash) continue;
+          socket.serializeAttachment({
+            ...attachment,
+            sessionExpiresAt: Math.min(room.babySessionExpiresAt, nextExpiresAt),
+          });
+        }
+      }
+    }
+    await this.scheduleCleanup(nextExpiresAt);
+    return nextExpiresAt;
   }
 
   private async resumeSession(recoveryToken: string) {
@@ -624,11 +886,19 @@ export class PairingCoordinator extends DurableObject<Env> {
     }
 
     const role: ParticipantRole = babyRow ? 'baby' : 'parent';
+    const renewedRoleExpiry = await this.renewMembership(
+      recoveryHash,
+      role,
+      role === 'parent' ? (row as ParentSessionRow).parentSessionExpiresAt : row.sessionExpiresAt,
+      recoveryToken,
+    );
+    const sessionExpiresAt =
+      role === 'parent' ? Math.min(row.sessionExpiresAt, renewedRoleExpiry) : renewedRoleExpiry;
     return jsonResponse(200, {
       role,
       roomId: row.roomId,
       expiresAt: new Date(row.expiresAt).toISOString(),
-      sessionExpiresAt: new Date(row.sessionExpiresAt).toISOString(),
+      sessionExpiresAt: new Date(sessionExpiresAt).toISOString(),
       pairingCode: role === 'baby' && row.expiresAt > now ? row.pairingCode : undefined,
       recoveryToken,
     });
@@ -647,32 +917,46 @@ export class PairingCoordinator extends DurableObject<Env> {
       )
       .toArray()[0];
     if (babyRow) {
+      const sessionExpiresAt = await this.renewMembership(
+        recoveryHash,
+        'baby',
+        babyRow.sessionExpiresAt,
+        recoveryToken,
+      );
       return {
         recoveryHash,
         role: 'baby' as const,
         roomId: babyRow.roomId,
-        sessionExpiresAt: babyRow.sessionExpiresAt,
+        sessionExpiresAt,
       };
     }
     const parentRow = this.ctx.storage.sql
-      .exec<{ roomId: string; sessionExpiresAt: number }>(
-        `SELECT p.room_id AS roomId, p.session_expires_at AS sessionExpiresAt
+      .exec<{ roomId: string; babySessionExpiresAt: number; parentSessionExpiresAt: number }>(
+        `SELECT p.room_id AS roomId,
+                p.session_expires_at AS babySessionExpiresAt,
+                s.session_expires_at AS parentSessionExpiresAt
          FROM parent_sessions s
          JOIN pairings p ON p.pairing_code = s.pairing_code
-         WHERE p.session_expires_at > ? AND s.recovery_hash = ?
+         WHERE p.session_expires_at > ? AND s.session_expires_at > ? AND s.recovery_hash = ?
          LIMIT 1`,
+        now,
         now,
         recoveryHash,
       )
       .toArray()[0];
-    return parentRow
-      ? {
-          recoveryHash,
-          role: 'parent' as const,
-          roomId: parentRow.roomId,
-          sessionExpiresAt: parentRow.sessionExpiresAt,
-        }
-      : undefined;
+    if (!parentRow) return undefined;
+    const renewedParentExpiry = await this.renewMembership(
+      recoveryHash,
+      'parent',
+      parentRow.parentSessionExpiresAt,
+      recoveryToken,
+    );
+    return {
+      recoveryHash,
+      role: 'parent' as const,
+      roomId: parentRow.roomId,
+      sessionExpiresAt: Math.min(parentRow.babySessionExpiresAt, renewedParentExpiry),
+    };
   }
 
   private async createSignalTicket(recoveryToken: string) {
@@ -699,7 +983,9 @@ export class PairingCoordinator extends DurableObject<Env> {
       }
     }
 
-    const ticket = randomBase64Url(32);
+    const shard = shardFromToken(recoveryToken);
+    const opaqueTicket = randomBase64Url(32);
+    const ticket = shard ? `s${shard}_${opaqueTicket}` : opaqueTicket;
     const ticketHash = await hashRecoveryToken(ticket);
     const expiresAt = Date.now() + 60_000;
     this.ctx.storage.sql.exec(
@@ -718,7 +1004,46 @@ export class PairingCoordinator extends DurableObject<Env> {
       roomId: membership.roomId,
       role: membership.role,
       expiresAt: new Date(expiresAt).toISOString(),
+      sessionExpiresAt: new Date(membership.sessionExpiresAt).toISOString(),
     });
+  }
+
+  private async endSession(recoveryToken: string) {
+    const membership = await this.membershipForRecoveryToken(recoveryToken);
+    if (!membership) return new Response(null, { status: 204 });
+
+    const sockets = this.roomSockets(membership.roomId);
+    if (membership.role === 'baby') {
+      this.ctx.storage.sql.exec(
+        `DELETE FROM parent_sessions
+         WHERE pairing_code IN (SELECT pairing_code FROM pairings WHERE room_id = ?)`,
+        membership.roomId,
+      );
+      this.ctx.storage.sql.exec('DELETE FROM signal_tickets WHERE room_id = ?', membership.roomId);
+      this.ctx.storage.sql.exec(
+        'DELETE FROM pairings WHERE room_id = ? AND baby_recovery_hash = ?',
+        membership.roomId,
+        membership.recoveryHash,
+      );
+      for (const socket of sockets) socket.close(4005, 'The Baby Unit ended this room.');
+      return new Response(null, { status: 204 });
+    }
+
+    this.ctx.storage.sql.exec(
+      'DELETE FROM signal_tickets WHERE recovery_hash = ?',
+      membership.recoveryHash,
+    );
+    this.ctx.storage.sql.exec(
+      'DELETE FROM parent_sessions WHERE recovery_hash = ?',
+      membership.recoveryHash,
+    );
+    for (const socket of sockets) {
+      const attachment = this.attachmentFor(socket);
+      if (attachment?.recoveryHash === membership.recoveryHash) {
+        socket.close(4005, 'This Parent Unit ended its session.');
+      }
+    }
+    return new Response(null, { status: 204 });
   }
 
   private async consumeSignalTicket(ticket: string) {
@@ -770,7 +1095,7 @@ export class PairingCoordinator extends DurableObject<Env> {
       return jsonResponse(426, { error: 'A WebSocket connection is required.' });
     }
     const ticket = new URL(request.url).searchParams.get('ticket') ?? '';
-    if (!/^[A-Za-z0-9_-]{43}$/.test(ticket)) {
+    if (!isSessionToken(ticket)) {
       return jsonResponse(401, { error: 'The signaling ticket is invalid.' });
     }
     const membership = await this.consumeSignalTicket(ticket);
@@ -881,6 +1206,22 @@ export class PairingCoordinator extends DurableObject<Env> {
     );
   }
 
+  private recordConnectionReport(socket: WebSocket, message: unknown) {
+    const sender = this.attachmentFor(socket);
+    if (!sender || sender.role !== 'parent' || !message || typeof message !== 'object') return false;
+    const report = message as Record<string, unknown>;
+    if (report.type !== 'connection-report') return false;
+    if (report.transport !== 'direct' && report.transport !== 'relay') return true;
+    console.log(
+      JSON.stringify({
+        event: 'webrtc_connection',
+        role: sender.role,
+        transport: report.transport,
+      }),
+    );
+    return true;
+  }
+
   webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
     if (typeof message !== 'string' || message.length > 32_768) {
       socket.close(1009, 'Signaling message is too large.');
@@ -896,7 +1237,8 @@ export class PairingCoordinator extends DurableObject<Env> {
       return;
     }
     try {
-      this.relaySignal(socket, JSON.parse(message));
+      const parsed: unknown = JSON.parse(message);
+      if (!this.recordConnectionReport(socket, parsed)) this.relaySignal(socket, parsed);
     } catch {
       socket.send(JSON.stringify({ type: 'error', error: 'Invalid signaling message.' }));
     }
@@ -937,27 +1279,37 @@ export class PairingCoordinator extends DurableObject<Env> {
     if (request.method !== 'POST') return jsonResponse(405, { error: 'Method not allowed.' });
 
     const body = (await request.json()) as InternalRequest;
-    if (url.pathname === '/signal-ticket' && /^[A-Za-z0-9_-]{43}$/.test(body.recoveryToken ?? '')) {
+    if (url.pathname === '/signal-ticket' && isSessionToken(body.recoveryToken ?? '')) {
       return this.createSignalTicket(body.recoveryToken!);
     }
-    const clientAddress = body.clientAddress?.trim() || 'unknown';
-    if (!this.consumeRateLimit(clientAddress)) {
-      return jsonResponse(429, { error: 'Too many pairing attempts. Wait a minute and try again.' });
+    if (url.pathname === '/end' && isSessionToken(body.recoveryToken ?? '')) {
+      return this.endSession(body.recoveryToken!);
     }
-
     if (
       url.pathname === '/create' &&
-      UUID_PATTERN.test(body.requestId ?? '')
+      UUID_PATTERN.test(body.requestId ?? '') &&
+      (body.shard === undefined || SHARD_PATTERN.test(body.shard))
     ) {
-      return jsonResponse(201, await this.createPairing(body.requestId!));
+      const rateLimitKey = body.rateLimitKey?.trim() || body.clientAddress?.trim() || 'unknown';
+      if (!this.consumeRateLimit(rateLimitKey)) {
+        return jsonResponse(429, { error: 'Too many pairing attempts. Wait a minute and try again.' });
+      }
+      return jsonResponse(201, await this.createPairing(body.requestId!, body.shard));
     }
     if (url.pathname === '/claim' && /^\d{6}$/.test(body.pairingCode ?? '')) {
       if (!UUID_PATTERN.test(body.requestId ?? '')) {
         return jsonResponse(400, { error: 'Invalid pairing request.' });
       }
-      return this.claimPairing(body.pairingCode!, body.requestId!);
+      if (body.shard !== undefined && body.shard !== shardFromPairingCode(body.pairingCode!)) {
+        return jsonResponse(400, { error: 'Invalid pairing shard.' });
+      }
+      const rateLimitKey = body.rateLimitKey?.trim() || body.clientAddress?.trim() || 'unknown';
+      if (!this.consumeRateLimit(rateLimitKey)) {
+        return jsonResponse(429, { error: 'Too many pairing attempts. Wait a minute and try again.' });
+      }
+      return this.claimPairing(body.pairingCode!, body.requestId!, body.shard);
     }
-    if (url.pathname === '/resume' && /^[A-Za-z0-9_-]{43}$/.test(body.recoveryToken ?? '')) {
+    if (url.pathname === '/resume' && isSessionToken(body.recoveryToken ?? '')) {
       return this.resumeSession(body.recoveryToken!);
     }
     return jsonResponse(400, { error: 'Invalid pairing request.' });
@@ -973,7 +1325,7 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/health') {
       try {
-        const storage = await coordinatorRequest(env, '/health');
+        const storage = await coordinatorRequest(env, coordinatorForShard(env, '00'), '/health');
         const signalingConfigured = hasValidSessionSecret(env.SESSION_SECRET);
         const healthy = storage.ok && signalingConfigured;
         return jsonResponse(healthy ? 200 : 503, {
@@ -981,6 +1333,7 @@ export default {
           storage: storage.ok ? 'ok' : 'unavailable',
           signaling: signalingConfigured ? 'configured' : 'missing',
           turn: env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN ? 'configured' : 'stun-only',
+          routing: shardedPairingsEnabled(env) ? 'sharded' : 'legacy-compatible',
         });
       } catch (error) {
         console.error('Health check failed', error);
@@ -1001,6 +1354,9 @@ export default {
       }
       if (request.method === 'POST' && url.pathname === '/api/session/resume') {
         return await handleResume(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/session/end') {
+        return await handleEndSession(request, env);
       }
       if (request.method === 'POST' && url.pathname === '/api/signal/ticket') {
         return await handleSignalTicket(request, env);

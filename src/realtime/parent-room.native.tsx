@@ -21,7 +21,12 @@ import {
   soundAlertConfigForSensitivity,
   type SoundAlertSensitivity,
 } from '@/monitoring/sound-alert-detector';
-import { audioLevelFromStats, connectionErrorMessage, iterableStats } from '@/realtime/peer-utils';
+import {
+  audioLevelFromStats,
+  connectionErrorMessage,
+  iceTransportFromStats,
+  iterableStats,
+} from '@/realtime/peer-utils';
 import type {
   RealtimeIceCandidate,
   RealtimeServerMessage,
@@ -44,6 +49,7 @@ type ParentRoomProps = {
   talking: boolean;
   soundSensitivity: SoundAlertSensitivity;
   onStatusChange: (status: MonitorStatus) => void;
+  onSessionRenewed: (sessionExpiresAt: string) => void;
   onBabyConnectedChange: (connected: boolean) => void;
   onBabyDeviceStatusChange: (status: BabyDeviceStatus) => void;
   onSoundDetected: () => void;
@@ -58,6 +64,7 @@ export function ParentRoom({
   talking,
   soundSensitivity,
   onStatusChange,
+  onSessionRenewed,
   onBabyConnectedChange,
   onBabyDeviceStatusChange,
   onSoundDetected,
@@ -66,6 +73,7 @@ export function ParentRoom({
 }: ParentRoomProps) {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [volume, setVolume] = useState(0);
+  const { recoveryToken, role, roomId } = session;
   const videoRef = useRef<ComponentRef<typeof RTCView>>(null);
   const audioOnlyRef = useRef(audioOnly);
   const talkingRef = useRef(talking);
@@ -97,6 +105,7 @@ export function ParentRoom({
     let connectionId: string | null = null;
     let micRequest: Promise<void> | null = null;
     let disconnectedTimer: ReturnType<typeof setTimeout> | null = null;
+    let connectionReportTimer: ReturnType<typeof setTimeout> | null = null;
     let previousEnergySample: { totalAudioEnergy: number; totalSamplesDuration: number } | null = null;
     let statsRunning = false;
     const queuedCandidates = new Map<string, RealtimeIceCandidate[]>();
@@ -190,6 +199,8 @@ export function ParentRoom({
     function closePeer() {
       if (disconnectedTimer) clearTimeout(disconnectedTimer);
       disconnectedTimer = null;
+      if (connectionReportTimer) clearTimeout(connectionReportTimer);
+      connectionReportTimer = null;
       const pc = pcRef.current;
       pcRef.current = null;
       connectionId = null;
@@ -245,7 +256,36 @@ export function ParentRoom({
       babyPeerId = fromPeerId;
       connectionId = nextConnectionId;
       const pc = new RTCPeerConnection({ iceServers, bundlePolicy: 'max-bundle' });
+      let connectionReported = false;
+      let connectionReportAttempts = 0;
       pcRef.current = pc;
+
+      function reportConnectionTransport() {
+        if (
+          disposed ||
+          pcRef.current !== pc ||
+          connectionReported ||
+          connectionReportAttempts >= 10
+        ) return;
+        connectionReportAttempts += 1;
+        void pc
+          .getStats()
+          .then((stats: unknown) => {
+            if (disposed || pcRef.current !== pc || connectionReported) return;
+            const transport = iceTransportFromStats(iterableStats(stats));
+            if (transport && signaling?.send({ type: 'connection-report', transport })) {
+              connectionReported = true;
+              return;
+            }
+            connectionReportTimer = setTimeout(reportConnectionTransport, 1_000);
+          })
+          .catch((error: unknown) => {
+            console.warn('Could not identify the WebRTC connection path.', error);
+            if (!disposed && pcRef.current === pc) {
+              connectionReportTimer = setTimeout(reportConnectionTransport, 1_000);
+            }
+          });
+      }
 
       pc.onicecandidate = (event) => {
         const candidate = (event as unknown as { candidate?: { toJSON(): RealtimeIceCandidate } })
@@ -299,6 +339,7 @@ export function ParentRoom({
           disconnectedTimer = null;
           onBabyConnectedChange(true);
           onStatusChange('connected');
+          reportConnectionTransport();
           return;
         }
         if (pc.connectionState === 'failed') {
@@ -369,11 +410,12 @@ export function ParentRoom({
       try {
         await startMonitoringAudioSession('parent');
         if (disposed) return;
-        signaling = new RealtimeSignalingConnection(session, {
+        signaling = new RealtimeSignalingConnection({ recoveryToken, role, roomId }, {
           onReady: (details) => {
             iceServers = details.iceServers;
             babyPeerId = details.peers.find(({ role }) => role === 'baby')?.peerId ?? null;
           },
+          onSessionRenewed,
           onMessage: (message) => {
             if (message.type === 'peer-joined' && message.peer.role === 'baby') {
               babyPeerId = message.peer.peerId;
@@ -452,9 +494,12 @@ export function ParentRoom({
   }, [
     onBabyConnectedChange,
     onError,
+    onSessionRenewed,
     onStatusChange,
     onTalkError,
-    session,
+    recoveryToken,
+    role,
+    roomId,
   ]);
 
   useEffect(() => {

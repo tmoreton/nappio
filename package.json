@@ -58,11 +58,13 @@
     "typecheck": "tsc --noEmit && tsc -p test/tsconfig.json --noEmit && npm --prefix worker run typecheck",
     "worker:dev": "npm --prefix worker run dev",
     "worker:deploy": "npm --prefix worker run deploy",
+    "worker:load-test": "node scripts/load-test-worker.mjs",
     "test": "npm run test:unit && npm run test:worker",
     "test:unit": "tsx --test test/**/*.test.ts",
     "test:worker": "npm --prefix worker test",
+    "check:scripts": "node --check scripts/check-turn-usage.mjs && node --check scripts/load-test-worker.mjs",
     "verify:expo-config": "node scripts/verify-expo-config.mjs",
-    "check": "npm run lint && npm run typecheck && npm run verify:expo-config && npm test"
+    "check": "npm run lint && npm run typecheck && npm run check:scripts && npm run verify:expo-config && npm test"
   },
   "private": true
 }

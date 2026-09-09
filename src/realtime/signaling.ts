@@ -1,4 +1,4 @@
-import { createSignalTicket, PairingApiError } from '@/pairing/api';
+import { createSignalTicket, PairingApiError, resumeSession } from '@/pairing/api';
 import type {
   RealtimeClientSignal,
   RealtimeConnectionDetails,
@@ -7,8 +7,11 @@ import type {
 import { parseRealtimeServerMessage } from '@/realtime/protocol';
 import type { MonitorSession, MonitorStatus } from '@/types/monitor';
 
+type SignalingSession = Pick<MonitorSession, 'recoveryToken' | 'role' | 'roomId'>;
+
 type SignalingCallbacks = {
   onReady: (details: RealtimeConnectionDetails) => void;
+  onSessionRenewed: (sessionExpiresAt: string) => void;
   onMessage: (message: RealtimeServerMessage) => void;
   onReset: () => void;
   onStatusChange: (status: MonitorStatus) => void;
@@ -16,6 +19,7 @@ type SignalingCallbacks = {
 };
 
 const PING_INTERVAL_MS = 25_000;
+const SESSION_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const WELCOME_TIMEOUT_MS = 10_000;
 const MAX_RECONNECT_DELAY_MS = 10_000;
 
@@ -26,10 +30,11 @@ export class RealtimeSignalingConnection {
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private renewalTimer: ReturnType<typeof setInterval> | null = null;
   private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
-    private readonly session: MonitorSession,
+    private readonly session: SignalingSession,
     private readonly callbacks: SignalingCallbacks,
   ) {}
 
@@ -77,9 +82,11 @@ export class RealtimeSignalingConnection {
   private clearTimers() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.renewalTimer) clearInterval(this.renewalTimer);
     if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
     this.reconnectTimer = null;
     this.pingTimer = null;
+    this.renewalTimer = null;
     this.welcomeTimer = null;
   }
 
@@ -91,6 +98,7 @@ export class RealtimeSignalingConnection {
       if (ticket.roomId !== this.session.roomId || ticket.role !== this.session.role) {
         throw new Error('The signaling ticket did not match this monitoring session.');
       }
+      this.callbacks.onSessionRenewed(ticket.sessionExpiresAt);
 
       const socket = new WebSocket(ticket.signalingUrl);
       this.socket = socket;
@@ -121,6 +129,10 @@ export class RealtimeSignalingConnection {
           this.pingTimer = setInterval(() => {
             if (socket.readyState === WebSocket.OPEN) socket.send('ping');
           }, PING_INTERVAL_MS);
+          if (this.renewalTimer) clearInterval(this.renewalTimer);
+          this.renewalTimer = setInterval(() => {
+            void this.renewSession(generation);
+          }, SESSION_RENEWAL_INTERVAL_MS);
           return;
         }
         this.callbacks.onMessage(message);
@@ -132,8 +144,10 @@ export class RealtimeSignalingConnection {
         if (this.socket === socket) this.socket = null;
         if (this.stopped || generation !== this.generation) return;
         if (this.pingTimer) clearInterval(this.pingTimer);
+        if (this.renewalTimer) clearInterval(this.renewalTimer);
         if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
         this.pingTimer = null;
+        this.renewalTimer = null;
         this.welcomeTimer = null;
         this.callbacks.onReset();
         if (event.code === 4003 || event.code === 4004) {
@@ -149,6 +163,24 @@ export class RealtimeSignalingConnection {
         return;
       }
       this.scheduleReconnect(generation);
+    }
+  }
+
+  private async renewSession(generation: number) {
+    try {
+      const renewed = await resumeSession(this.session.recoveryToken);
+      if (this.stopped || generation !== this.generation) return;
+      if (renewed.roomId !== this.session.roomId || renewed.role !== this.session.role) {
+        throw new Error('The renewed session did not match this monitoring room.');
+      }
+      this.callbacks.onSessionRenewed(renewed.sessionExpiresAt);
+    } catch (error) {
+      if (this.stopped || generation !== this.generation) return;
+      if (error instanceof PairingApiError && error.status === 410) {
+        this.failPermanently(error.message);
+      } else {
+        console.warn('Could not renew the monitoring session yet.', error);
+      }
     }
   }
 

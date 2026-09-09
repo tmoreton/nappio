@@ -1,0 +1,54 @@
+name: Deploy Nappio pairing Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/worker.yml'
+      - 'worker/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check deployment credentials
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Install Worker dependencies
+        run: npm --prefix worker ci
+      - name: Verify Worker
+        run: npm --prefix worker run typecheck && npm --prefix worker test
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npm --prefix worker run deploy -- --message "GitHub ${GITHUB_SHA}"
+      - name: Verify production health
+        run: |
+          response=$(curl --fail --silent --show-error --retry 5 --retry-delay 5 https://nappio-pairing-api.tmoreton89.workers.dev/health)
+          test "$(jq -r '.status' <<< "$response")" = "ok"
+          test "$(jq -r '.storage' <<< "$response")" = "ok"
+          test "$(jq -r '.signaling' <<< "$response")" = "configured"
+          test "$(jq -r '.turn' <<< "$response")" = "configured"
+          test "$(jq -r '.routing' <<< "$response")" = "sharded"
