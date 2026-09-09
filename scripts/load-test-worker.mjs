@@ -44,9 +44,55 @@ async function post(path, body, clientId) {
   }
 }
 
+function openSignaling(signalingUrl, expectedRole) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(signalingUrl);
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error(`Timed out opening the ${expectedRole} signaling socket.`));
+    }, 10_000);
+    socket.addEventListener('message', (event) => {
+      if (typeof event.data !== 'string') return;
+      let message;
+      try {
+        message = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (message.type !== 'welcome') return;
+      clearTimeout(timeout);
+      if (message.role !== expectedRole) {
+        socket.close();
+        reject(new Error(`The signaling socket assigned ${message.role} instead of ${expectedRole}.`));
+        return;
+      }
+      resolve({ socket, welcome: message });
+    });
+    socket.addEventListener('error', () => {
+      clearTimeout(timeout);
+      reject(new Error(`The ${expectedRole} signaling socket failed.`));
+    });
+  });
+}
+
+function expectPong(socket) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Signaling heartbeat timed out.')), 5_000);
+    const onMessage = (event) => {
+      if (event.data !== 'pong') return;
+      clearTimeout(timeout);
+      socket.removeEventListener('message', onMessage);
+      resolve();
+    };
+    socket.addEventListener('message', onMessage);
+    socket.send('ping');
+  });
+}
+
 async function exerciseRoom(index, durations) {
   const clientId = crypto.randomUUID();
   let babyRecoveryToken;
+  const sockets = [];
   try {
     const created = await post('/api/pair/create', undefined, clientId);
     durations.push(created.durationMs);
@@ -71,9 +117,19 @@ async function exerciseRoom(index, durations) {
       babyTicket.durationMs,
       parentTicket.durationMs,
     );
+
+    const babySignal = await openSignaling(babyTicket.payload.signalingUrl, 'baby');
+    sockets.push(babySignal.socket);
+    const parentSignal = await openSignaling(parentTicket.payload.signalingUrl, 'parent');
+    sockets.push(parentSignal.socket);
+    if (!parentSignal.welcome.peers.some((peer) => peer.role === 'baby')) {
+      throw new Error('The Parent signaling welcome did not include the Baby peer.');
+    }
+    await expectPong(parentSignal.socket);
   } catch (error) {
     throw new Error(`Room ${index + 1} failed: ${error instanceof Error ? error.message : error}`);
   } finally {
+    sockets.forEach((socket) => socket.close(1000, 'Lifecycle probe complete.'));
     if (babyRecoveryToken) {
       const ended = await post('/api/session/end', { recoveryToken: babyRecoveryToken }, clientId);
       durations.push(ended.durationMs);
@@ -103,6 +159,7 @@ const result = {
   target: baseUrl,
   rooms: roomCount,
   requests: durations.length,
+  webSockets: roomCount * 2,
   elapsedSeconds: Number(((performance.now() - started) / 1_000).toFixed(2)),
   p50Ms: Number(percentile(0.5).toFixed(1)),
   p95Ms: Number(percentile(0.95).toFixed(1)),
