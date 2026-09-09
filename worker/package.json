@@ -1,6 +1,21 @@
 {
   "name": "nappio-pairing-worker",
+  "description": "Cloudflare pairing, signaling, session, and TURN credential service for Nappio.",
   "version": "1.0.0",
+  "author": "Tim Moreton",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/tmoreton/nappio#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tmoreton/nappio.git",
+    "directory": "worker"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "overrides": {
+    "sharp": "0.35.4"
+  },
   "private": true,
   "type": "module",
   "dependencies": {},

@@ -1,5 +1,3 @@
-export const BABY_DEVICE_STATUS_TOPIC = 'nappio.baby-device-status.v1';
-
 export type BabyDeviceStatus = {
   batteryLevel: number | null;
   isCharging: boolean | null;

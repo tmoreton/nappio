@@ -20,26 +20,13 @@
 
 ## Required physical device verification
 
+- [ ] Complete every case in `docs/physical-device-testing.md`, including a relayed connection and the one-Baby/three-Parent room.
 - [ ] On a fresh install, confirm onboarding appears once; complete or skip it, relaunch, and confirm the role chooser opens directly.
 - [ ] Replay the welcome guide from Help & support and confirm Back, Continue, and Choose a role all work.
-- [ ] Pair by typed code and by QR code; while the invite is active, join from a second Parent device and confirm both sessions can resume independently.
-- [ ] Confirm the Baby Unit shows the correct connected-parent count while each Parent device joins and leaves.
-- [ ] Confirm Baby Unit camera and microphone indicators match active monitoring.
-- [ ] Confirm Parent Unit audio/video and Audio Only transitions.
-- [ ] Hold push-to-talk on each Parent device and confirm the Baby Unit plays clear audio only while the control is held.
 - [ ] Confirm releasing push-to-talk, backgrounding the Parent app, and disconnecting the Baby Unit all stop the Parent microphone.
-- [ ] On iOS, start Picture in Picture and confirm live video remains visible over another app.
-- [ ] Lock the Parent phone for at least 30 minutes and confirm uninterrupted audio.
-- [ ] With monitoring alerts enabled, confirm the Test action produces an audible time-sensitive notification and each sensitivity choice persists after relaunch.
-- [ ] With the Parent phone locked, make sustained sound near the Baby Unit and confirm a single audible notification appears without repeated alerts for at least 60 seconds.
-- [ ] Confirm Baby Unit battery, charging, and freshness status update; then verify the unplugged and low-battery alerts.
-- [ ] Disconnect the Baby Unit while the Parent phone is locked and confirm an interruption notification appears.
-- [ ] Move the Parent phone between Wi-Fi and cellular and confirm reconnection.
-- [ ] Disconnect and reconnect Bluetooth audio during monitoring.
-- [ ] Force-quit and reopen each role; use Continue and confirm the session resumes.
+- [ ] Confirm each sound-alert sensitivity persists after relaunch and does not repeat within its cooldown.
 - [ ] Advance or shorten the test expiry and confirm authenticated use renews each role without re-pairing.
 - [ ] Leave both phones running for an overnight soak test while connected to power.
-- [ ] End each role and confirm camera, microphone, audio, and the local saved session are released.
 - [ ] After ending a Parent session, confirm only that Parent credential is rejected; after ending the Baby room, confirm every Parent credential is rejected.
 - [ ] Repeat the core pair, video, audio, and permission flows with at least one physical iPad.
 

@@ -13,7 +13,7 @@ export const SOUND_ALERT_SENSITIVITIES = ['low', 'standard', 'high'] as const;
 
 export type SoundAlertSensitivity = (typeof SOUND_ALERT_SENSITIVITIES)[number];
 
-export const DEFAULT_SOUND_ALERT_CONFIG: SoundAlertDetectorConfig = {
+const DEFAULT_SOUND_ALERT_CONFIG: SoundAlertDetectorConfig = {
   threshold: 0.12,
   sustainedForMs: 1_200,
   cooldownMs: 60_000,

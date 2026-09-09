@@ -52,7 +52,7 @@ This order ensures the immediately previous Cloudflare version understands route
 
 ## Normal deployment
 
-After the first migration, merging a verified change to `main` runs the Worker deployment, OTA update, public-site deployment, and quality workflows. Deploy the Worker before publishing client code that depends on a new API response or route. The Worker must remain backward-compatible with the currently distributed App Store/TestFlight build.
+After the first migration, merging to `main` in the official repository publishes an OTA update and the public site. Changes under `worker/` also deploy the Worker. Pull requests run the quality workflow. Deploy the Worker before publishing client code that depends on a new API response or route. The Worker must remain backward-compatible with the currently distributed App Store/TestFlight build.
 
 After deployment:
 

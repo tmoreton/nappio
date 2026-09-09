@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   health:
+    if: github.repository == 'tmoreton/nappio'
     runs-on: ubuntu-latest
     steps:
       - name: Check pairing API

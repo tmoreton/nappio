@@ -1,138 +1,171 @@
 # Nappio
 
-Nappio turns phones into a private baby monitor. The Baby Unit sends its rear camera and microphone directly to up to three Parent Units over WebRTC; each Parent can watch the encrypted stream, talk back, or switch to true audio-only mode for locked-screen listening.
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Verify Nappio changes](https://github.com/tmoreton/nappio/actions/workflows/quality.yml/badge.svg)](https://github.com/tmoreton/nappio/actions/workflows/quality.yml)
 
-This repository contains the Expo SDK 57 app and its Cloudflare Worker. The Worker handles temporary pairing and WebSocket signaling. Media normally travels phone-to-phone and uses Cloudflare TURN only when the devices cannot make a direct connection. Nappio never records it.
+Nappio turns phones into a private baby monitor. One phone is the **Baby Unit** and sends its camera and microphone to as many as three **Parent Units**. Each Parent can watch, listen with the screen locked, switch to audio only, or hold to talk back.
 
-- Landing page: [tmoreton.github.io/nappio](https://tmoreton.github.io/nappio/)
-- Expo project: [@reactnativenerd/Nappio](https://expo.dev/accounts/reactnativenerd/projects/Nappio)
+The media path is peer to peer whenever the network allows it. A small Cloudflare Worker coordinates pairing and WebRTC signaling, while Cloudflare TURN is used only when a direct connection is blocked. Nappio has no accounts and does not record audio or video.
 
-The public landing page is implemented as the web-specific home route. A GitHub Actions workflow exports the static Expo site with the `/nappio` base path and deploys it to GitHub Pages whenever `main` changes.
+> Nappio is not a medical device and is not a substitute for direct adult supervision.
 
-## What is implemented
+- [Project website](https://tmoreton.github.io/nappio/)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Apache-2.0 license](LICENSE)
 
-- Baby Unit camera and microphone publishing with local preview
-- screen wake lock and dimmed monitoring view
-- reusable five-minute room invites by six-digit code or QR code
-- QR-code pairing and `nappio://` deep links
-- single-use, role-scoped signaling tickets
-- WebRTC DTLS-SRTP encryption for audio, video, and data
-- Parent Unit remote video and audio playback
-- multiple Parent Units in one room, each with independent session recovery
-- hold-to-talk audio from any Parent Unit to the Baby Unit
-- true audio-only mode that stops the Baby Unit's video sender for that Parent
-- automatic audio-only mode when the Parent app backgrounds
-- iOS background-audio capability and native audio-route picker
-- connected, reconnecting, disconnected, unavailable, and failure states
-- optional local alerts for sustained sound or a dropped connection while monitoring in the background
-- adjustable sound-alert sensitivity, a test alert, and time-sensitive iOS notifications
-- Baby Unit battery, charging, and freshness status with low-power alerts
-- manual iOS Picture in Picture for live video
-- renewable 30-day role-scoped session recovery protected by iOS Keychain or Android Keystore
-- immediate server-side room/session revocation when a saved session is replaced or ended
-- request size limits, no-store responses, and layered per-installation/per-address pairing rate limits
-- a public HTTPS pairing API backed by a SQLite Durable Object
-- deterministic routing across 100 SQLite Durable Object shards, with legacy-session compatibility
-- automatic expiry cleanup using Durable Object alarms
-- anonymous direct-versus-relay connection telemetry and attributed TURN usage monitoring
-- local protocol tests and Cloudflare-runtime integration tests
-- public privacy/support information, scheduled production health and TURN-budget checks, and reproducible Worker deployments
+## How it works
+
+```mermaid
+sequenceDiagram
+    participant B as Baby Unit
+    participant W as Cloudflare Worker
+    participant P as Parent Unit
+    participant T as Cloudflare TURN
+
+    B->>W: Create a 5-minute invite
+    W-->>B: Pairing code + Baby recovery token
+    P->>W: Join with code or QR
+    W-->>P: Separate Parent recovery token
+    B->>W: Exchange offer and ICE candidates
+    P->>W: Exchange answer and ICE candidates
+    B<<->>P: Encrypted WebRTC audio, video, and data
+    B-->>T: Relay encrypted packets only if direct WebRTC fails
+    T-->>P: Relay encrypted packets only if direct WebRTC fails
+```
+
+1. The Baby Unit asks the Worker for a room. The Worker returns a six-digit code, a QR-compatible deep link, and a role-scoped recovery token.
+2. The code stays usable for five minutes, so as many as three Parent Units can join the same room. Every Parent gets an independent recovery token.
+3. Each device exchanges a single-use signaling ticket for a WebSocket. The Worker relays only the WebRTC offer, answer, and ICE candidates needed to connect the phones.
+4. The Baby Unit creates one `RTCPeerConnection` per Parent. Camera and microphone media use encrypted DTLS-SRTP; small control messages and Baby battery status use the WebRTC data channel.
+5. WebRTC first tries a direct route. If NAT or a firewall prevents that, the same encrypted packets travel through Cloudflare TURN. TURN can forward those packets but cannot decode the media.
+6. Holding **Talk** adds the Parent microphone in the reverse direction. **Audio Only** tells the Baby Unit to stop sending video to that Parent without interrupting audio.
+7. Saved role sessions renew during authenticated use and expire after 30 days. Ending the Baby session revokes the room; ending or replacing a Parent session revokes only that Parent.
+
+### What the service handles
+
+| Data | Where it goes | Retention |
+| --- | --- | --- |
+| Camera, microphone, and talk-back media | Directly between phones, or encrypted through TURN | Not stored by Nappio |
+| Pairing code and random room identifier | Cloudflare Durable Object | Pairing code expires after 5 minutes; room data expires with its sessions |
+| Session recovery credential | Stored on-device; only its SHA-256 hash is stored by the Worker | Rolling 30-day expiry |
+| WebRTC offers and ICE candidates | Hibernating Worker WebSockets | Relayed in memory, not intentionally persisted |
+| Random installation ID and network address | Layered pairing-abuse counters | Short rate-limit windows; address log retention follows the deployer's Cloudflare settings |
+| Connection route (`direct` or `relay`) | Anonymous Worker operational log | Controlled by the deployer's Cloudflare log settings |
+| One-way room attribution ID | Cloudflare TURN credentials and analytics | Controlled by the deployer's TURN and analytics settings |
+
+Cloudflare may process network metadata and operational logs under its own terms. See the [privacy implementation notes](docs/app-store-privacy.md) before operating a public deployment.
+
+## Architecture
+
+- **Mobile app:** Expo SDK 57, React Native, and Expo Router.
+- **Realtime media:** `@livekit/react-native-webrtc` provides the native WebRTC implementation. `@livekit/react-native` is used for native audio-session setup only; Nappio does not use a LiveKit server or SFU.
+- **Pairing and signaling:** a Cloudflare Worker routes rooms across 100 SQLite-backed Durable Object shards. A shard makes create/join operations atomic and owns the room's hibernating signaling WebSockets.
+- **Network fallback:** Cloudflare's free STUN endpoint helps establish direct connections. Short-lived TURN credentials are generated by the Worker when TURN is configured.
+- **Local secrets:** installation IDs and recovery tokens use iOS Keychain or Android Keystore through Expo SecureStore.
+- **Alerts:** sound, power, and interruption alerts are calculated locally. Nappio does not register for remote push notifications.
+
+The separate peer connection per Parent keeps the server simple and avoids an always-on media service. The tradeoff is that the Baby phone uploads one stream per connected Parent and therefore uses more battery and upstream bandwidth as the room grows.
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/app` | Expo Router screens and the static project website |
+| `src/realtime` | Native WebRTC peers, signaling client, and protocol validation |
+| `src/pairing` | Pairing API client, codes, installation ID, and response types |
+| `src/monitoring` | Local alerts, preferences, audio detection, and Baby device status |
+| `src/livekit` | Native WebRTC global and audio-session integration |
+| `worker` | Cloudflare Worker, Durable Object, tests, and Wrangler configuration |
+| `test` | Platform-independent app unit tests |
+| `scripts` | Bounded load and TURN-usage checks |
+| `docs` | Production, privacy, release, and store documentation |
 
 ## Requirements
 
 - Node.js 22.13 or newer
-- Xcode 26.4 or newer for SDK 57 iOS builds
-- two physical iPhones for the main flow; three for multi-parent testing
-- an Apple Developer team for installing development builds on physical devices
-- a Cloudflare account for production Worker deployments
-- a Cloudflare Realtime TURN key for reliable connections across restrictive networks
+- Xcode 26.4 or newer for SDK 57 iOS builds, or the corresponding Android toolchain
+- Two physical phones for the main flow; three or four for multi-Parent testing
+- A custom development build because native WebRTC is not included in Expo Go
+- A Cloudflare account to deploy the pairing Worker
+- A Cloudflare Realtime TURN key for reliable operation across restrictive networks
 
-Expo Go cannot run this app because monitoring requires native WebRTC modules.
+## Quick start
 
-## Configure locally
-
-Install dependencies:
+Install both dependency sets:
 
 ```sh
 npm install
+npm --prefix worker install
 ```
 
-Copy the Worker template. Set a unique `SESSION_SECRET` with at least 32 characters. TURN credentials are optional for local same-network testing.
+Create local Worker secrets and run the Worker:
 
 ```sh
 cp worker/.dev.vars.example worker/.dev.vars
+# Set SESSION_SECRET to a random value of at least 32 characters.
 npm run worker:dev
 ```
 
-Create the app environment file. For physical devices, use the deployed HTTPS pairing service:
+Create the app environment file and set `EXPO_PUBLIC_API_BASE_URL`:
 
 ```sh
 cp .env.example .env
 ```
 
-For a physical device, set `EXPO_PUBLIC_API_BASE_URL` to the deployed HTTPS Worker URL. For a simulator, Wrangler's default local URL is `http://127.0.0.1:8787`; a physical device needs a reachable LAN address or the deployed Worker.
+Wrangler normally listens on `http://127.0.0.1:8787`. A physical phone cannot use that loopback address; use your computer's reachable LAN address or deploy the Worker over HTTPS.
 
-## Production pairing API
-
-The TestFlight production environment uses:
-
-```text
-https://nappio-pairing-api.tmoreton89.workers.dev
-```
-
-The Worker stores expiring room invites, hashed session-recovery credentials, single-use signaling tickets, and short-lived rate limits across 100 deterministically selected SQLite-backed Durable Objects. It relays only WebRTC connection descriptions and candidates over hibernating WebSockets. An invite can add multiple Parent Units during its five-minute lifetime. Each role has an independent 30-day expiry that renews during authenticated use; ending a Baby room revokes the whole room, while replacing a Parent session revokes only that Parent.
-
-For local Worker development:
-
-```sh
-cp worker/.dev.vars.example worker/.dev.vars
-npm run worker:dev
-```
-
-Create a TURN key in Cloudflare Realtime, then deploy and set all three Worker secrets. Never put any of them in an `EXPO_PUBLIC_` variable.
-
-```sh
-npm run worker:deploy
-npx wrangler secret put SESSION_SECRET --config worker/wrangler.jsonc
-npx wrangler secret put TURN_KEY_ID --config worker/wrangler.jsonc
-npx wrangler secret put TURN_KEY_API_TOKEN --config worker/wrangler.jsonc
-```
-
-Without the TURN secrets, the Worker deliberately returns Cloudflare's free STUN server only. That is useful for development, but some carrier, hotel, school, and corporate networks will fail to connect.
-
-Production deploys are automated by `.github/workflows/worker.yml`. Configure `CLOUDFLARE_ACCOUNT_ID` as a repository secret and a narrowly scoped `CLOUDFLARE_API_TOKEN` in the `production` GitHub environment. Configure `CLOUDFLARE_ANALYTICS_TOKEN` plus the optional `TURN_DAILY_EGRESS_WARN_GB` repository variable for the daily TURN budget check. See [the production runbook](docs/production-runbook.md) for the staged sharding migration, verification, rotation, and rollback procedures.
-
-## Run on two physical iPhones
-
-Start the Worker locally in one terminal, or configure the app to use the deployed Worker:
-
-```sh
-npm run worker:dev
-```
-
-Build and install the native development client on the first connected iPhone:
+Build the native development client on each phone, then start Metro:
 
 ```sh
 npx expo run:ios --device
-```
-
-Install the same development build on the second iPhone by running the command again and selecting that device. After both have the client installed, start Metro on the LAN:
-
-```sh
 npx expo start --dev-client --lan
 ```
 
-Open Nappio on both phones and select the development server. One phone chooses **Use as Baby Camera** and the other chooses **Monitor Baby**.
+Use `npx expo run:android --device` for Android. Open Nappio on both phones, choose **Use as Baby Camera** on one, and **Monitor Baby** on the other.
 
-An EAS development build is also configured:
+## Self-host the backend
 
-```sh
-npx eas-cli build --profile development --platform ios
+The hosted endpoint used by official Nappio builds is not a shared public backend for forks. A fork or redistributed build should deploy its own Worker and TURN key.
+
+1. Sign in to Cloudflare and choose a unique Worker name plus a unique positive integer for `ratelimits[0].namespace_id` in `worker/wrangler.jsonc`.
+2. Create a Realtime TURN key in the Cloudflare dashboard or with the API. Keep its token ID and API token server-side; never place them in an `EXPO_PUBLIC_` variable.
+3. Deploy once so Cloudflare provisions the SQLite Durable Object namespace:
+
+   ```sh
+   npx wrangler login
+   npm run worker:deploy
+   ```
+
+4. Add the three Worker secrets:
+
+   ```sh
+   npx wrangler secret put SESSION_SECRET --config worker/wrangler.jsonc
+   npx wrangler secret put TURN_KEY_ID --config worker/wrangler.jsonc
+   npx wrangler secret put TURN_KEY_API_TOKEN --config worker/wrangler.jsonc
+   ```
+
+5. Point `EXPO_PUBLIC_API_BASE_URL` in `.env` at the HTTPS URL printed by Wrangler and rebuild the app.
+
+Without the TURN secrets, the Worker deliberately returns only Cloudflare's STUN server. That is often enough on the same Wi-Fi network, but connections can fail on carrier, hotel, school, or corporate networks. Cloudflare documents the current [TURN setup](https://developers.cloudflare.com/realtime/turn/generate-credentials/) and [TURN pricing](https://developers.cloudflare.com/realtime/turn/faq/).
+
+### Give a fork its own app identity
+
+The checked-in Expo identifiers belong to the official Nappio build. Set these build-time values in your fork's `.env` before creating native or EAS builds:
+
+```dotenv
+NAPPIO_EXPO_OWNER=your-expo-account
+NAPPIO_EXPO_SLUG=your-project-slug
+NAPPIO_EAS_PROJECT_ID=00000000-0000-0000-0000-000000000000
+NAPPIO_IOS_BUNDLE_IDENTIFIER=com.example.nappio
+NAPPIO_ANDROID_PACKAGE=com.example.nappio
 ```
 
-## Checks
+If you do not use EAS, remove or replace the official `owner`, `extra.eas`, `updates`, and store submission values in `app.json` and `eas.json`. The repository's deployment workflows are intentionally limited to `tmoreton/nappio`; a fork can adapt those guards and secrets for its own infrastructure.
 
-Run the full repeatable local verification suite:
+## Verify changes
+
+Run the repeatable local checks:
 
 ```sh
 npm run check
@@ -141,44 +174,23 @@ EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
 npm --prefix worker run deploy -- --dry-run
 ```
 
-For a bounded API load probe, start the local Worker and run `npm run worker:load-test`. The script defaults to 25 rooms, cleans each one up, and refuses to target production unless `ALLOW_PRODUCTION_LOAD_TEST=true` is explicitly set.
+For a bounded API probe, start the local Worker and run `npm run worker:load-test`. It creates 25 rooms by default, ends every room it creates, and refuses to target a production URL unless `ALLOW_PRODUCTION_LOAD_TEST=true` is explicitly set.
 
-## Physical-device test checklist
+Automated checks cannot validate camera, background audio, Bluetooth routing, radio transitions, or real TURN behavior. Complete the [physical-device test checklist](docs/physical-device-testing.md) before a production release.
 
-1. Start the Baby Unit and allow camera/microphone access.
-2. Confirm the rear-camera preview appears and the app does not let the screen sleep.
-3. Enter or scan the displayed code on the Parent Unit.
-4. Confirm the Baby Unit says **1 parent connected**.
-5. Confirm live video and audio reach the Parent Unit.
-6. While the invite is still visible, join from a second Parent iPhone and confirm the Baby Unit says **2 parents connected** and both receive the stream.
-7. On each Parent Unit, hold **Hold to talk**, speak, and verify the Baby Unit plays audio only while the button is held.
-8. Tap **Audio Only** and verify video network traffic for that Parent falls to zero while audio continues.
-9. Lock the Parent iPhone and listen continuously for at least 30 minutes.
-10. With monitoring alerts enabled, send a test alert, make sustained sound near the Baby Unit, and verify the locked Parent phone receives a sound alert; then disconnect the Baby Unit and verify the interruption warning appears.
-11. Confirm the Baby Unit battery/charging status updates, and verify the low-battery and unplugged alerts.
-12. Unlock it, tap **Show Video**, and verify video returns; on iOS, start **PiP** and verify video remains visible over another app.
-13. Briefly enable airplane mode, then disable it and verify **Reconnecting** returns to **Monitoring live**.
-14. Force-quit and reopen each role, then use **Continue** and verify the same session reconnects.
-15. Repeat with Wi-Fi/cellular transitions and Bluetooth connect/disconnect.
-16. End monitoring from each role and verify the camera, microphone, audio session, and saved Continue action release.
+## Operating the official deployment
 
-## Security notes
-
-- `worker/.dev.vars` and all local `.env` variants are ignored by Git.
-- Recovery credentials authorize only a Baby or Parent signaling role. Single-use signaling tickets expire after 60 seconds.
-- WebRTC encrypts media and control data between devices with DTLS-SRTP. A TURN relay forwards encrypted packets and cannot decode the camera, microphone, or push-to-talk media.
-- Room invites can be reused by multiple Parent Units and expire after five minutes.
-- Each Parent Unit receives a separate recovery token. Role-specific recovery tokens are stored only as SHA-256 hashes by the Worker and renew for 30 days during active authenticated use.
-- Up to three simultaneous Parent signaling connections are allowed. The Baby Unit creates a separate encrypted peer connection for each Parent, trading a small amount of Baby-side upload and battery use for minimal relay cost.
-- The first two digits of a new pairing code route create/join/signaling operations to one of 100 Durable Object shards. Each shard keeps its own create-and-claim operations atomic. Pre-sharding recovery tokens remain supported until they expire.
-- A random installation UUID and Cloudflare's edge address counter provide layered pairing-abuse limits. The UUID is not an Apple advertising identifier and is not used for tracking.
-- TURN credentials are generated server-side and are never compiled into the mobile app.
-- TURN credentials carry a one-way room attribution identifier. Parent Units report only whether WebRTC selected a direct or relayed path; no room or device identifier is included in that Worker log event.
-- The public health endpoint reports storage, signaling-secret, and TURN configuration without exposing credentials.
-
-## Launch material
-
+- [Production runbook](docs/production-runbook.md)
 - [Launch checklist](docs/launch-checklist.md)
 - [App Store metadata draft](docs/app-store-metadata.md)
-- Privacy policy: [tmoreton.github.io/nappio/#privacy-policy](https://tmoreton.github.io/nappio/#privacy-policy)
-- Support: [tmoreton.github.io/nappio/#support](https://tmoreton.github.io/nappio/#support)
+- [App Store privacy notes](docs/app-store-privacy.md)
+
+The official workflows require repository and environment secrets for Cloudflare and Expo. No secret belongs in source control, an issue, a screenshot, or an app-visible environment variable.
+
+## Contributing
+
+Bug reports and focused pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing the signaling protocol, permissions, background behavior, or privacy surface. Report vulnerabilities privately according to [SECURITY.md](SECURITY.md).
+
+## License
+
+Nappio is licensed under the [Apache License 2.0](LICENSE). Dependencies retain their own licenses. The `private` fields in the package manifests only prevent accidental publication to npm; they do not make the source proprietary.

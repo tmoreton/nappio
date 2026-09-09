@@ -34,4 +34,19 @@ if (!config.updates?.url || !config.runtimeVersion) {
   throw new Error('EAS Update requires updates.url and runtimeVersion in the Expo config.');
 }
 
+const expectedOverrides = [
+  ['NAPPIO_EXPO_OWNER', config.owner],
+  ['NAPPIO_EXPO_SLUG', config.slug],
+  ['NAPPIO_EAS_PROJECT_ID', config.extra?.eas?.projectId],
+  ['NAPPIO_IOS_BUNDLE_IDENTIFIER', config.ios?.bundleIdentifier],
+  ['NAPPIO_ANDROID_PACKAGE', config.android?.package],
+];
+
+for (const [name, actual] of expectedOverrides) {
+  const expected = process.env[name]?.trim();
+  if (expected && actual !== expected) {
+    throw new Error(`${name} was not applied to the resolved Expo config.`);
+  }
+}
+
 console.log('Expo native config verified: local notifications and EAS Update are configured.');
