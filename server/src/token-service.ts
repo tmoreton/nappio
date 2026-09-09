@@ -23,11 +23,13 @@ export class LiveKitTokenService implements TokenService {
     token.addGrant({
       room: roomId,
       roomJoin: true,
-      canPublish: role === 'baby',
+      canPublish: true,
       canPublishSources:
-        role === 'baby' ? [TrackSource.CAMERA, TrackSource.MICROPHONE] : undefined,
-      canSubscribe: role === 'parent',
-      canPublishData: false,
+        role === 'baby'
+          ? [TrackSource.CAMERA, TrackSource.MICROPHONE]
+          : [TrackSource.MICROPHONE],
+      canSubscribe: true,
+      canPublishData: role === 'baby',
     });
     return token.toJwt();
   }

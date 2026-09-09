@@ -19,7 +19,7 @@ export default function SupportScreen() {
         <Text style={styles.eyebrow}>NAPPIO SUPPORT</Text>
         <Text style={styles.title}>Let’s get monitoring working.</Text>
         <Text style={styles.intro}>
-          Most connection problems are resolved by confirming permissions, connectivity, and a fresh one-time code.
+          Most connection problems are resolved by confirming permissions, connectivity, and an active room code.
         </Text>
         <View style={styles.card}>
           {troubleshooting.map((item, index) => (

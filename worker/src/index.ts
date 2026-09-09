@@ -26,6 +26,11 @@ type PairingRow = {
   claimRequestId: string | null;
 };
 
+type ParentSessionRow = PairingRow & {
+  parentRecoveryHash: string;
+  claimRequestId: string;
+};
+
 type InternalRequest = {
   clientAddress?: string;
   pairingCode?: string;
@@ -121,11 +126,13 @@ async function createLiveKitToken(role: ParticipantRole, roomId: string, env: En
   token.addGrant({
     room: roomId,
     roomJoin: true,
-    canPublish: role === 'baby',
+    canPublish: true,
     canPublishSources:
-      role === 'baby' ? [TrackSource.CAMERA, TrackSource.MICROPHONE] : undefined,
-    canSubscribe: role === 'parent',
-    canPublishData: false,
+      role === 'baby'
+        ? [TrackSource.CAMERA, TrackSource.MICROPHONE]
+        : [TrackSource.MICROPHONE],
+    canSubscribe: true,
+    canPublishData: role === 'baby',
   });
   return {
     token: await token.toJwt(),
@@ -231,6 +238,17 @@ export class PairingCoordinator extends DurableObject<Env> {
       CREATE INDEX IF NOT EXISTS pairings_session_expires_at ON pairings (session_expires_at);
       CREATE UNIQUE INDEX IF NOT EXISTS pairings_create_request_id ON pairings (create_request_id);
       CREATE UNIQUE INDEX IF NOT EXISTS pairings_claim_request_id ON pairings (claim_request_id);
+      CREATE TABLE IF NOT EXISTS parent_sessions (
+        recovery_hash TEXT PRIMARY KEY,
+        pairing_code TEXT NOT NULL,
+        claim_request_id TEXT NOT NULL UNIQUE
+      );
+      CREATE INDEX IF NOT EXISTS parent_sessions_pairing_code
+        ON parent_sessions (pairing_code);
+      INSERT OR IGNORE INTO parent_sessions (recovery_hash, pairing_code, claim_request_id)
+        SELECT parent_recovery_hash, pairing_code, claim_request_id
+        FROM pairings
+        WHERE parent_recovery_hash IS NOT NULL AND claim_request_id IS NOT NULL;
     `);
   }
 
@@ -296,18 +314,51 @@ export class PairingCoordinator extends DurableObject<Env> {
 
   private rowForClaimRequest(requestId: string) {
     return this.ctx.storage.sql
-      .exec<PairingRow>(
-        `SELECT pairing_code AS pairingCode, room_id AS roomId,
-                encryption_key AS encryptionKey, expires_at AS expiresAt,
-                session_expires_at AS sessionExpiresAt, claimed,
-                baby_recovery_hash AS babyRecoveryHash,
-                parent_recovery_hash AS parentRecoveryHash,
-                create_request_id AS createRequestId,
-                claim_request_id AS claimRequestId
-         FROM pairings WHERE claim_request_id = ?`,
+      .exec<ParentSessionRow>(
+        `SELECT p.pairing_code AS pairingCode, p.room_id AS roomId,
+                p.encryption_key AS encryptionKey, p.expires_at AS expiresAt,
+                p.session_expires_at AS sessionExpiresAt, p.claimed,
+                p.baby_recovery_hash AS babyRecoveryHash,
+                s.recovery_hash AS parentRecoveryHash,
+                p.create_request_id AS createRequestId,
+                s.claim_request_id AS claimRequestId
+         FROM parent_sessions s
+         JOIN pairings p ON p.pairing_code = s.pairing_code
+         WHERE s.claim_request_id = ?`,
         requestId,
       )
       .toArray()[0];
+  }
+
+  private rowForParentRecovery(recoveryHash: string) {
+    return this.ctx.storage.sql
+      .exec<ParentSessionRow>(
+        `SELECT p.pairing_code AS pairingCode, p.room_id AS roomId,
+                p.encryption_key AS encryptionKey, p.expires_at AS expiresAt,
+                p.session_expires_at AS sessionExpiresAt, p.claimed,
+                p.baby_recovery_hash AS babyRecoveryHash,
+                s.recovery_hash AS parentRecoveryHash,
+                p.create_request_id AS createRequestId,
+                s.claim_request_id AS claimRequestId
+         FROM parent_sessions s
+         JOIN pairings p ON p.pairing_code = s.pairing_code
+         WHERE s.recovery_hash = ? AND p.session_expires_at > ?
+         LIMIT 1`,
+        recoveryHash,
+        Date.now(),
+      )
+      .toArray()[0];
+  }
+
+  private purgeExpiredSessions(now: number) {
+    this.ctx.storage.sql.exec(
+      `DELETE FROM parent_sessions
+       WHERE pairing_code IN (
+         SELECT pairing_code FROM pairings WHERE session_expires_at <= ?
+       )`,
+      now,
+    );
+    this.ctx.storage.sql.exec('DELETE FROM pairings WHERE session_expires_at <= ?', now);
   }
 
   private async scheduleCleanup(sessionExpiresAt?: number) {
@@ -325,7 +376,7 @@ export class PairingCoordinator extends DurableObject<Env> {
 
   private async createPairing(requestId: string) {
     const now = Date.now();
-    this.ctx.storage.sql.exec('DELETE FROM pairings WHERE session_expires_at <= ?', now);
+    this.purgeExpiredSessions(now);
     const existing = this.rowForCreateRequest(requestId);
     if (existing) {
       const babyRecoveryToken = await recoveryTokenFor('baby', requestId, this.env.LIVEKIT_API_SECRET);
@@ -412,9 +463,6 @@ export class PairingCoordinator extends DurableObject<Env> {
     if (row.expiresAt <= now) {
       return jsonResponse(410, { error: 'That pairing code has expired.' });
     }
-    if (row.claimed) {
-      return jsonResponse(409, { error: 'That pairing code has already been used.' });
-    }
     return jsonResponse(409, { error: `Pairing code ${pairingCode} could not be claimed.` });
   }
 
@@ -445,17 +493,18 @@ export class PairingCoordinator extends DurableObject<Env> {
     }
 
     const row = this.rowForCode(pairingCode);
-    if (!row || row.claimed || row.expiresAt <= Date.now()) {
+    if (!row || row.expiresAt <= Date.now()) {
       return this.pairingFailure(row, pairingCode);
     }
 
     const parentRecoveryToken = await recoveryTokenFor('parent', requestId, this.env.LIVEKIT_API_SECRET);
     const parentRecoveryHash = await hashRecoveryToken(parentRecoveryToken);
     const access = await createLiveKitToken('parent', row.roomId, this.env);
-    const updated = this.ctx.storage.sql
+    const inserted = this.ctx.storage.sql
       .exec<{ pairingCode: string }>(
-        `UPDATE pairings SET claimed = 1, parent_recovery_hash = ?, claim_request_id = ?
-         WHERE pairing_code = ? AND claimed = 0 AND expires_at > ?
+        `INSERT OR IGNORE INTO parent_sessions (recovery_hash, pairing_code, claim_request_id)
+         SELECT ?, pairing_code, ? FROM pairings
+         WHERE pairing_code = ? AND expires_at > ?
          RETURNING pairing_code AS pairingCode`,
         parentRecoveryHash,
         requestId,
@@ -463,7 +512,7 @@ export class PairingCoordinator extends DurableObject<Env> {
         Date.now(),
       )
       .toArray();
-    if (updated.length !== 1) {
+    if (inserted.length !== 1) {
       const concurrentReplay = this.rowForClaimRequest(requestId);
       if (concurrentReplay?.pairingCode === pairingCode) {
         return jsonResponse(200, {
@@ -479,6 +528,10 @@ export class PairingCoordinator extends DurableObject<Env> {
       return this.pairingFailure(this.rowForCode(pairingCode), pairingCode);
     }
 
+    // Preserve the legacy marker for safe rolling upgrades. New joins are stored
+    // independently in parent_sessions and are not blocked by this value.
+    this.ctx.storage.sql.exec('UPDATE pairings SET claimed = 1 WHERE pairing_code = ?', pairingCode);
+
     return jsonResponse(200, {
       roomId: row.roomId,
       parentToken: access.token,
@@ -493,7 +546,7 @@ export class PairingCoordinator extends DurableObject<Env> {
   private async resumeSession(recoveryToken: string) {
     const recoveryHash = await hashRecoveryToken(recoveryToken);
     const now = Date.now();
-    const row = this.ctx.storage.sql
+    const babyRow = this.ctx.storage.sql
       .exec<PairingRow>(
         `SELECT pairing_code AS pairingCode, room_id AS roomId,
                 encryption_key AS encryptionKey, expires_at AS expiresAt,
@@ -504,18 +557,18 @@ export class PairingCoordinator extends DurableObject<Env> {
                 claim_request_id AS claimRequestId
          FROM pairings
          WHERE session_expires_at > ?
-           AND (baby_recovery_hash = ? OR parent_recovery_hash = ?)
+           AND baby_recovery_hash = ?
          LIMIT 1`,
         now,
         recoveryHash,
-        recoveryHash,
       )
       .toArray()[0];
+    const row = babyRow ?? this.rowForParentRecovery(recoveryHash);
     if (!row) {
       return jsonResponse(410, { error: 'The saved monitoring session is no longer available.' });
     }
 
-    const role: ParticipantRole = row.babyRecoveryHash === recoveryHash ? 'baby' : 'parent';
+    const role: ParticipantRole = babyRow ? 'baby' : 'parent';
     const access = await createLiveKitToken(role, row.roomId, this.env);
     return jsonResponse(200, {
       role,
@@ -525,14 +578,14 @@ export class PairingCoordinator extends DurableObject<Env> {
       encryptionKey: row.encryptionKey,
       expiresAt: new Date(row.expiresAt).toISOString(),
       sessionExpiresAt: new Date(row.sessionExpiresAt).toISOString(),
-      pairingCode: role === 'baby' && row.expiresAt > now && !row.claimed ? row.pairingCode : undefined,
+      pairingCode: role === 'baby' && row.expiresAt > now ? row.pairingCode : undefined,
       recoveryToken,
     });
   }
 
   async alarm() {
     const now = Date.now();
-    this.ctx.storage.sql.exec('DELETE FROM pairings WHERE session_expires_at <= ?', now);
+    this.purgeExpiredSessions(now);
     this.ctx.storage.sql.exec('DELETE FROM rate_limits WHERE window_started_at <= ?', now - 60_000);
     await this.scheduleCleanup();
   }

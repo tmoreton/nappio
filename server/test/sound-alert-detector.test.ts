@@ -4,8 +4,23 @@ import test from 'node:test';
 import {
   advanceSoundAlertDetector,
   createSoundAlertDetectorState,
+  isSoundAlertSensitivity,
+  soundAlertConfigForSensitivity,
   type SoundAlertDetectorConfig,
 } from '../../src/monitoring/sound-alert-detector';
+
+test('sound sensitivity presets become progressively easier to trigger', () => {
+  const low = soundAlertConfigForSensitivity('low');
+  const standard = soundAlertConfigForSensitivity('standard');
+  const high = soundAlertConfigForSensitivity('high');
+
+  assert.ok(low.threshold > standard.threshold);
+  assert.ok(standard.threshold > high.threshold);
+  assert.ok(low.sustainedForMs > standard.sustainedForMs);
+  assert.ok(standard.sustainedForMs > high.sustainedForMs);
+  assert.equal(isSoundAlertSensitivity('standard'), true);
+  assert.equal(isSoundAlertSensitivity('maximum'), false);
+});
 
 const config: SoundAlertDetectorConfig = {
   threshold: 0.1,

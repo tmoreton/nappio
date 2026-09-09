@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-const ONBOARDING_KEY = 'nappio.onboarding.v1';
+const ONBOARDING_KEY = 'nappio.onboarding.v2';
 const COMPLETE_VALUE = 'complete';
 
 export async function hasCompletedOnboarding(): Promise<boolean> {

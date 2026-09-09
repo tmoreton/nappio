@@ -20,7 +20,7 @@ export default function BabyScreen() {
   useMonitoringKeepAwake();
   const { session, isHydrated, setSession, clearSession } = useMonitorSession();
   const [status, setStatus] = useState<MonitorStatus>('requesting-permissions');
-  const [parentConnected, setParentConnected] = useState(false);
+  const [parentCount, setParentCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [dimmed, setDimmed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -154,7 +154,7 @@ export default function BabyScreen() {
         <BabyRoom
           session={babySession}
           onStatusChange={setStatus}
-          onParentConnectedChange={setParentConnected}
+          onParentCountChange={setParentCount}
           onError={handleRoomError}
         />
       </View>
@@ -174,7 +174,7 @@ export default function BabyScreen() {
           <ConnectionStatus
             compact
             status={status}
-            label={status === 'connected' ? (parentConnected ? 'Parent connected' : 'Waiting for parent') : undefined}
+            label={status === 'connected' ? parentConnectionLabel(parentCount) : undefined}
           />
         </View>
 
@@ -214,9 +214,7 @@ export default function BabyScreen() {
               status={status}
               label={
                 status === 'connected'
-                  ? parentConnected
-                    ? 'Parent connected'
-                    : 'Waiting for parent'
+                  ? parentConnectionLabel(parentCount)
                   : undefined
               }
             />
@@ -227,6 +225,12 @@ export default function BabyScreen() {
       ) : null}
     </View>
   );
+}
+
+function parentConnectionLabel(parentCount: number) {
+  if (parentCount === 0) return 'Waiting for parent';
+  if (parentCount === 1) return '1 parent connected';
+  return `${parentCount} parents connected`;
 }
 
 const styles = StyleSheet.create({

@@ -28,7 +28,7 @@ const tokens = new LiveKitTokenService(
   3600,
 );
 
-test('baby token can publish only camera and microphone and cannot subscribe', async () => {
+test('baby token can publish monitoring media and subscribe to parent talk audio', async () => {
   const payload = decodePayload(await tokens.createToken('baby', 'private-room'));
 
   assert.equal(payload.attributes.role, 'baby');
@@ -37,19 +37,19 @@ test('baby token can publish only camera and microphone and cannot subscribe', a
   assert.equal(payload.video.roomJoin, true);
   assert.equal(payload.video.canPublish, true);
   assert.deepEqual(payload.video.canPublishSources, ['camera', 'microphone']);
-  assert.equal(payload.video.canSubscribe, false);
-  assert.equal(payload.video.canPublishData, false);
+  assert.equal(payload.video.canSubscribe, true);
+  assert.equal(payload.video.canPublishData, true);
 });
 
-test('parent token can subscribe but cannot publish', async () => {
+test('parent token can subscribe and can publish only push-to-talk microphone audio', async () => {
   const payload = decodePayload(await tokens.createToken('parent', 'private-room'));
 
   assert.equal(payload.attributes.role, 'parent');
   assert.match(payload.sub, /^parent-/);
   assert.equal(payload.video.room, 'private-room');
   assert.equal(payload.video.roomJoin, true);
-  assert.equal(payload.video.canPublish, false);
+  assert.equal(payload.video.canPublish, true);
   assert.equal(payload.video.canSubscribe, true);
   assert.equal(payload.video.canPublishData, false);
-  assert.equal(payload.video.canPublishSources, undefined);
+  assert.deepEqual(payload.video.canPublishSources, ['microphone']);
 });

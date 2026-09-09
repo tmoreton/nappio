@@ -13,6 +13,12 @@ function post(path: string, body?: unknown, requestId?: string, clientAddress = 
   });
 }
 
+function tokenGrant(token: string) {
+  const encoded = token.split('.')[1]!;
+  const base64 = encoded.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+  return (JSON.parse(atob(base64)) as { video: Record<string, unknown> }).video;
+}
+
 describe('Nappio pairing Worker', () => {
   it('reports configured storage and LiveKit credentials', async () => {
     const response = await exports.default.fetch('https://nappio.test/health');
@@ -31,6 +37,12 @@ describe('Nappio pairing Worker', () => {
     expect(created.pairingCode).toMatch(/^\d{6}$/);
     expect(created.babyRecoveryToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(created.babyToken.split('.')).toHaveLength(3);
+    expect(tokenGrant(created.babyToken)).toMatchObject({
+      canPublish: true,
+      canPublishData: true,
+      canPublishSources: ['camera', 'microphone'],
+      canSubscribe: true,
+    });
 
     const joinedResponse = await post('/api/pair/join', { pairingCode: created.pairingCode });
     expect(joinedResponse.status).toBe(200);
@@ -38,6 +50,12 @@ describe('Nappio pairing Worker', () => {
     expect(joined.roomId).toBe(created.roomId);
     expect(joined.encryptionKey).toBe(created.encryptionKey);
     expect(joined.parentRecoveryToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(tokenGrant(joined.parentToken)).toMatchObject({
+      canPublish: true,
+      canPublishData: false,
+      canPublishSources: ['microphone'],
+      canSubscribe: true,
+    });
 
     const resumedResponse = await post('/api/session/resume', {
       recoveryToken: joined.parentRecoveryToken,
@@ -49,13 +67,43 @@ describe('Nappio pairing Worker', () => {
     expect(resumed.token.split('.')).toHaveLength(3);
   });
 
-  it('keeps one-time pairing claims atomic', async () => {
-    const created = (await (await post('/api/pair/create')).json()) as Record<string, string>;
+  it('lets multiple parents join the same active invite', async () => {
+    const clientAddress = '203.0.113.20';
+    const created = (await (
+      await post('/api/pair/create', undefined, undefined, clientAddress)
+    ).json()) as Record<string, string>;
     const responses = await Promise.all([
-      post('/api/pair/join', { pairingCode: created.pairingCode }),
-      post('/api/pair/join', { pairingCode: created.pairingCode }),
+      post('/api/pair/join', { pairingCode: created.pairingCode }, undefined, clientAddress),
+      post('/api/pair/join', { pairingCode: created.pairingCode }, undefined, clientAddress),
     ]);
-    expect(responses.map(({ status }) => status).sort()).toEqual([200, 409]);
+    expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+    const [firstParent, secondParent] = (await Promise.all(
+      responses.map((response) => response.json()),
+    )) as Record<string, string>[];
+    expect(firstParent.roomId).toBe(created.roomId);
+    expect(secondParent.roomId).toBe(created.roomId);
+    expect(secondParent.parentRecoveryToken).not.toBe(firstParent.parentRecoveryToken);
+
+    const resumed = await Promise.all(
+      [firstParent, secondParent].map((parent) =>
+        post(
+          '/api/session/resume',
+          { recoveryToken: parent.parentRecoveryToken },
+          undefined,
+          clientAddress,
+        ),
+      ),
+    );
+    expect(resumed.map(({ status }) => status)).toEqual([200, 200]);
+
+    const resumedBaby = await post('/api/session/resume', {
+      recoveryToken: created.babyRecoveryToken,
+    }, undefined, clientAddress);
+    expect(resumedBaby.status).toBe(200);
+    await expect(resumedBaby.json()).resolves.toMatchObject({
+      role: 'baby',
+      pairingCode: created.pairingCode,
+    });
   });
 
   it('replays create and join attempts safely after a lost response', async () => {

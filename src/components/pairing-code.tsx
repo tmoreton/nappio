@@ -12,12 +12,12 @@ export function PairingCode({ code, expiresAt }: { code: string; expiresAt: stri
   return (
     <View style={styles.card}>
       <View style={styles.copy}>
-        <Text style={styles.eyebrow}>CONNECT PARENT PHONE</Text>
+        <Text style={styles.eyebrow}>INVITE PARENT PHONES</Text>
         <Text selectable style={styles.code} accessibilityLabel={`Pairing code ${code}`}>
           {code.slice(0, 3)} {code.slice(3)}
         </Text>
         <Text numberOfLines={1} style={styles.note}>
-          Expires {expiration} · one use
+          Reusable until {expiration}
         </Text>
       </View>
       <View style={styles.qr}>

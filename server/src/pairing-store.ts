@@ -6,15 +6,13 @@ export type PairingRecord = {
   encryptionKey: string;
   expiresAt: Date;
   sessionExpiresAt: Date;
-  claimed: boolean;
   babyRecoveryHash: string;
-  parentRecoveryHash?: string;
+  parentRecoveryHashes: Set<string>;
   createRequestId: string;
-  claimRequestId?: string;
+  claimRequestIds: Set<string>;
 };
 
 export type PairingFailureCode =
-  | 'already-used'
   | 'expired'
   | 'not-found'
   | 'request-conflict'
@@ -80,9 +78,10 @@ export class PairingStore {
       encryptionKey: this.keyGenerator(),
       expiresAt: new Date(this.now() + this.options.ttlMs),
       sessionExpiresAt: new Date(this.now() + this.options.sessionTtlMs),
-      claimed: false,
       babyRecoveryHash: hashRecoveryToken(recoveryToken),
+      parentRecoveryHashes: new Set(),
       createRequestId: requestId,
+      claimRequestIds: new Set(),
     };
     this.records.set(pairingCode, record);
     return { pairing: record, recoveryToken, isReplay: false };
@@ -94,21 +93,20 @@ export class PairingStore {
     recoveryToken = this.recoveryTokenGenerator(),
   ) {
     const replay = Array.from(this.records.values()).find(
-      (pairing) => pairing.claimRequestId === requestId,
+      (pairing) => pairing.claimRequestIds.has(requestId),
     );
     if (replay) {
       if (replay.pairingCode !== pairingCode) throw new PairingStoreError('request-conflict');
       return { pairing: replay, recoveryToken, requestId, isReplay: true };
     }
-    const pairing = this.requireClaimable(pairingCode);
+    const pairing = this.requireJoinable(pairingCode);
     return { pairing, recoveryToken, requestId, isReplay: false };
   }
 
   completeClaim(pairingCode: string, recoveryToken: string, requestId: string) {
-    const pairing = this.requireClaimable(pairingCode);
-    pairing.claimed = true;
-    pairing.parentRecoveryHash = hashRecoveryToken(recoveryToken);
-    pairing.claimRequestId = requestId;
+    const pairing = this.requireJoinable(pairingCode);
+    pairing.parentRecoveryHashes.add(hashRecoveryToken(recoveryToken));
+    pairing.claimRequestIds.add(requestId);
     return pairing;
   }
 
@@ -117,7 +115,9 @@ export class PairingStore {
     const recoveryHash = hashRecoveryToken(recoveryToken);
     for (const pairing of this.records.values()) {
       if (pairing.babyRecoveryHash === recoveryHash) return { pairing, role: 'baby' as const };
-      if (pairing.parentRecoveryHash === recoveryHash) return { pairing, role: 'parent' as const };
+      if (pairing.parentRecoveryHashes.has(recoveryHash)) {
+        return { pairing, role: 'parent' as const };
+      }
     }
     throw new PairingStoreError('session-expired');
   }
@@ -126,13 +126,12 @@ export class PairingStore {
     this.records.delete(pairingCode);
   }
 
-  private requireClaimable(pairingCode: string) {
+  private requireJoinable(pairingCode: string) {
     const record = this.records.get(pairingCode);
     if (!record) throw new PairingStoreError('not-found');
     if (record.expiresAt.getTime() <= this.now()) {
       throw new PairingStoreError('expired');
     }
-    if (record.claimed) throw new PairingStoreError('already-used');
     return record;
   }
 

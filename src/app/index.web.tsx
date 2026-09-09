@@ -15,15 +15,15 @@ const features = [
   },
   {
     number: '03',
-    title: 'Pair, then disappear',
-    copy: 'A random six-digit code works once, expires after five minutes, and never becomes an account.',
+    title: 'Invite, then disappear',
+    copy: 'A random six-digit invite can connect multiple Parent devices for five minutes and never becomes an account.',
   },
 ];
 
 const steps = [
-  ['Baby phone', 'Place one iPhone near the crib and start the camera.'],
-  ['Private code', 'Scan the QR code or enter six digits on your phone.'],
-  ['Parent phone', 'Watch live video, or switch to audio when it is time to sleep.'],
+  ['Baby device', 'Place one iPhone or iPad near the crib and start the camera.'],
+  ['Private invite', 'Scan the QR code or enter six digits on each Parent device.'],
+  ['Parent devices', 'Watch, listen, or hold to talk back from any connected Parent device.'],
 ];
 
 function BrandMark() {
@@ -51,7 +51,7 @@ function CameraPreview() {
         <span /> Parent connected
       </div>
       <div className={styles.codeSheet}>
-        <p>PAIRING CODE</p>
+        <p>ROOM INVITE</p>
         <strong>482 193</strong>
         <small>Expires in 04:36</small>
       </div>
@@ -78,7 +78,7 @@ function AudioPreview() {
         <p>Audio continues when your phone is locked.</p>
       </div>
       <div className={styles.audioControls}>
-        <span>Show video</span>
+        <span>Hold to talk</span>
         <strong>End</strong>
       </div>
     </div>
@@ -89,16 +89,16 @@ export default function LandingPage() {
   return (
     <>
       <Head>
-        <title>Nappio — A private baby monitor between two phones</title>
+        <title>Nappio — A private baby monitor between phones</title>
         <meta
           name="description"
-          content="Turn two iPhones into an encrypted baby monitor with live video, lock-screen audio, and one-time pairing."
+          content="Turn your iPhone or iPad into an encrypted baby monitor with live video, talk-back, lock-screen audio, and private room invites."
         />
         <meta name="theme-color" content="#f6f3ec" />
         <meta property="og:title" content="Nappio — Rest easy. Stay close." />
         <meta
           property="og:description"
-          content="An encrypted baby monitor made from the two phones you already have."
+          content="An encrypted baby monitor made from the phones you already have."
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://tmoreton.github.io/nappio/" />
@@ -122,10 +122,10 @@ export default function LandingPage() {
         <main id="top">
           <section className={styles.hero}>
             <div className={styles.heroCopy}>
-              <p className={styles.eyebrow}>A PRIVATE LINK BETWEEN TWO PHONES</p>
+              <p className={styles.eyebrow}>A PRIVATE ROOM BETWEEN YOUR DEVICES</p>
               <h1>Rest easy.<br />Stay close.</h1>
               <p className={styles.lede}>
-                Turn the phones you already have into an encrypted baby monitor—with live video when you want it and audio when the screen is locked.
+                Turn the devices you already have into an encrypted baby monitor—with live video, push-to-talk, and audio when the screen is locked.
               </p>
               <div className={styles.heroActions}>
                 <a className={styles.primaryCta} href="#beta">Join the TestFlight beta <span>↗</span></a>
@@ -133,7 +133,7 @@ export default function LandingPage() {
               </div>
               <div className={styles.trustRow} aria-label="Nappio product highlights">
                 <span>No account</span>
-                <span>One-time pairing</span>
+                <span>Private room invites</span>
                 <span>No recording</span>
               </div>
             </div>
@@ -173,7 +173,7 @@ export default function LandingPage() {
           <section className={styles.how} id="how-it-works">
             <div className={styles.howCopy}>
               <p className={styles.eyebrow}>UP AND RUNNING IN A MINUTE</p>
-              <h2>Two phones.<br />Three small steps.</h2>
+              <h2>Your devices.<br />Three small steps.</h2>
               <p>No new hardware, cloud account, or complicated home-network setup.</p>
             </div>
             <ol className={styles.steps}>
@@ -189,12 +189,12 @@ export default function LandingPage() {
           <section className={styles.beta} id="beta">
             <div>
               <p className={styles.eyebrow}>FIRST NIGHT SOON</p>
-              <h2>Nappio is heading to TestFlight.</h2>
-              <p>The first private beta is being prepared for iPhone now.</p>
+              <h2>Nappio is coming to the App Store.</h2>
+              <p>Built for iPhone and iPad, with a private TestFlight beta available now.</p>
             </div>
             <div className={styles.betaBadge}>
               <BrandMark />
-              <div><small>COMING TO</small><strong>TestFlight</strong></div>
+              <div><small>COMING TO THE</small><strong>App Store</strong></div>
             </div>
           </section>
 
@@ -203,13 +203,13 @@ export default function LandingPage() {
               <p className={styles.eyebrow}>PRIVACY POLICY · UPDATED SEPTEMBER 8, 2026</p>
               <h2>Private by design, explained plainly.</h2>
               <p>
-                Nappio makes a temporary private connection between two phones. It does not create accounts, sell personal information, use advertising analytics, or provide recording.
+                Nappio makes a temporary private room between phones. It does not create accounts, sell personal information, use advertising analytics, or provide recording.
               </p>
             </div>
             <div className={styles.legalGrid}>
               <article>
                 <h3>Camera, microphone, and alerts</h3>
-                <p>The Baby Unit uses its camera and microphone only for live monitoring. Optional Parent Unit notifications report sustained sound or an interrupted connection while monitoring is active.</p>
+                <p>The Baby Unit uses its camera and microphone for live monitoring. A Parent Unit uses its microphone only while push-to-talk is held. Optional notifications report sound, interruptions, or Baby Unit power concerns while monitoring is active.</p>
               </article>
               <article>
                 <h3>Temporary pairing data</h3>

@@ -8,34 +8,60 @@ import {
   useTracks,
   VideoTrack,
 } from '@livekit/react-native';
-import { RemoteTrackPublication, Room, RoomEvent, Track } from 'livekit-client';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { startIOSPIP } from '@livekit/react-native-webrtc';
+import {
+  ConnectionState,
+  MediaDeviceFailure,
+  RemoteAudioTrack,
+  RemoteTrackPublication,
+  Room,
+  RoomEvent,
+  Track,
+} from 'livekit-client';
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 
 import { palette, spacing } from '@/constants/design';
 import { startMonitoringAudioSession, stopMonitoringAudioSession } from '@/livekit/audio-session';
 import { connectionStateToMonitorStatus } from '@/livekit/connection-state';
 import {
+  BABY_DEVICE_STATUS_TOPIC,
+  parseBabyDeviceStatus,
+  type BabyDeviceStatus,
+} from '@/monitoring/baby-device-status';
+import {
   advanceSoundAlertDetector,
   createSoundAlertDetectorState,
+  soundAlertConfigForSensitivity,
+  type SoundAlertSensitivity,
 } from '@/monitoring/sound-alert-detector';
 import type { MonitorSession, MonitorStatus } from '@/types/monitor';
 
 type ParentRoomProps = {
   session: MonitorSession;
   audioOnly: boolean;
+  pipRequest: number;
+  talking: boolean;
+  soundSensitivity: SoundAlertSensitivity;
   onStatusChange: (status: MonitorStatus) => void;
   onBabyConnectedChange: (connected: boolean) => void;
+  onBabyDeviceStatusChange: (status: BabyDeviceStatus) => void;
   onSoundDetected: () => void;
+  onTalkError: (message: string) => void;
   onError: (message: string) => void;
 };
 
 export function ParentRoom({
   session,
   audioOnly,
+  pipRequest,
+  talking,
+  soundSensitivity,
   onStatusChange,
   onBabyConnectedChange,
+  onBabyDeviceStatusChange,
   onSoundDetected,
+  onTalkError,
   onError,
 }: ParentRoomProps) {
   const { e2eeManager } = useRNE2EEManager({ sharedKey: session.encryptionKey });
@@ -78,11 +104,17 @@ export function ParentRoom({
       audio={false}
       video={false}
       onError={(error) => onError(error.message)}
+      onMediaDeviceFailure={(failure) => onTalkError(mediaDeviceFailureMessage(failure))}
       onEncryptionError={() => onError('The encrypted media session could not be established.')}>
       <ParentRoomContent
         audioOnly={audioOnly}
+        pipRequest={pipRequest}
+        talking={talking}
+        soundSensitivity={soundSensitivity}
         onBabyConnectedChange={onBabyConnectedChange}
+        onBabyDeviceStatusChange={onBabyDeviceStatusChange}
         onSoundDetected={onSoundDetected}
+        onTalkError={onTalkError}
         onStatusChange={onStatusChange}
       />
     </LiveKitRoom>
@@ -91,12 +123,25 @@ export function ParentRoom({
 
 function ParentRoomContent({
   audioOnly,
+  pipRequest,
+  talking,
+  soundSensitivity,
   onBabyConnectedChange,
+  onBabyDeviceStatusChange,
   onSoundDetected,
+  onTalkError,
   onStatusChange,
 }: Pick<
   ParentRoomProps,
-  'audioOnly' | 'onBabyConnectedChange' | 'onSoundDetected' | 'onStatusChange'
+  | 'audioOnly'
+  | 'pipRequest'
+  | 'talking'
+  | 'soundSensitivity'
+  | 'onBabyConnectedChange'
+  | 'onBabyDeviceStatusChange'
+  | 'onSoundDetected'
+  | 'onTalkError'
+  | 'onStatusChange'
 >) {
   const room = useRoomContext();
   const connectionState = useConnectionState();
@@ -111,6 +156,36 @@ function ParentRoomContent({
   );
   const volume = useTrackVolume(babyAudio);
   const soundAlertState = useRef(createSoundAlertDetectorState());
+  const videoRef = useRef<ComponentRef<typeof VideoTrack>>(null);
+
+  useEffect(() => {
+    if (connectionState !== ConnectionState.Connected) return;
+    let cancelled = false;
+    const localParticipant = room.localParticipant;
+
+    void localParticipant
+      .setMicrophoneEnabled(
+        talking,
+        talking
+          ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          : undefined,
+      )
+      .then(() => {
+        if (cancelled && talking) void localParticipant.setMicrophoneEnabled(false);
+      })
+      .catch((reason: unknown) => {
+        if (!talking) {
+          console.warn('Could not stop push-to-talk audio.', reason);
+          return;
+        }
+        onTalkError(reason instanceof Error ? reason.message : 'The microphone could not start.');
+      });
+
+    return () => {
+      cancelled = true;
+      if (talking) void localParticipant.setMicrophoneEnabled(false);
+    };
+  }, [connectionState, onTalkError, room, talking]);
 
   useEffect(() => {
     onStatusChange(connectionStateToMonitorStatus(connectionState));
@@ -123,14 +198,48 @@ function ParentRoomContent({
   }, [onBabyConnectedChange, participants]);
 
   useEffect(() => {
+    const handleDataReceived = (
+      payload: Uint8Array,
+      participant: { attributes: Record<string, string> } | undefined,
+      _kind: unknown,
+      topic: string | undefined,
+    ) => {
+      if (topic !== BABY_DEVICE_STATUS_TOPIC || participant?.attributes.role !== 'baby') return;
+      const deviceStatus = parseBabyDeviceStatus(payload);
+      if (deviceStatus) onBabyDeviceStatusChange(deviceStatus);
+    };
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+    return () => {
+      room.off(RoomEvent.DataReceived, handleDataReceived);
+    };
+  }, [onBabyDeviceStatusChange, room]);
+
+  useEffect(() => {
+    soundAlertState.current = createSoundAlertDetectorState();
+  }, [soundSensitivity]);
+
+  useEffect(() => {
     const result = advanceSoundAlertDetector(
       soundAlertState.current,
       babyAudio ? volume : 0,
       Date.now(),
+      soundAlertConfigForSensitivity(soundSensitivity),
     );
     soundAlertState.current = result.state;
     if (result.shouldNotify) onSoundDetected();
-  }, [babyAudio, onSoundDetected, volume]);
+  }, [babyAudio, onSoundDetected, soundSensitivity, volume]);
+
+  useEffect(() => {
+    if (Platform.OS === 'ios' && pipRequest > 0 && babyVideo) {
+      startIOSPIP(videoRef);
+    }
+  }, [babyVideo, pipRequest]);
+
+  useEffect(() => {
+    if (!babyAudio) return;
+    const track = babyAudio.publication.track;
+    if (track instanceof RemoteAudioTrack) track.setVolume(1);
+  }, [babyAudio]);
 
   useEffect(() => {
     const setCameraSubscription = (publication: RemoteTrackPublication) => {
@@ -155,7 +264,20 @@ function ParentRoomContent({
   if (!babyVideo) {
     return <MonitorPlaceholder label="Waiting for the baby camera…" />;
   }
-  return <VideoTrack trackRef={babyVideo} style={styles.video} objectFit="cover" />;
+  return (
+    <VideoTrack
+      ref={videoRef}
+      trackRef={babyVideo}
+      style={styles.video}
+      objectFit="cover"
+      iosPIP={{
+        enabled: true,
+        preferredSize: { width: 9, height: 16 },
+        startAutomatically: false,
+        stopAutomatically: true,
+      }}
+    />
+  );
 }
 
 function AudioOnlyView({ volume, connected }: { volume: number; connected: boolean }) {
@@ -177,7 +299,6 @@ function AudioOnlyView({ volume, connected }: { volume: number; connected: boole
           />
         ))}
       </View>
-      <Text style={styles.audioCopy}>Audio will keep playing when this phone is locked.</Text>
     </View>
   );
 }
@@ -189,6 +310,19 @@ function MonitorPlaceholder({ label }: { label: string }) {
       <Text style={styles.placeholderText}>{label}</Text>
     </View>
   );
+}
+
+function mediaDeviceFailureMessage(failure?: MediaDeviceFailure) {
+  if (failure === MediaDeviceFailure.PermissionDenied) {
+    return 'Microphone permission was denied. Allow it in Settings and try again.';
+  }
+  if (failure === MediaDeviceFailure.DeviceInUse) {
+    return 'The microphone is being used by another app.';
+  }
+  if (failure === MediaDeviceFailure.NotFound) {
+    return 'Nappio could not find an available microphone.';
+  }
+  return 'The microphone could not start.';
 }
 
 const styles = StyleSheet.create({
@@ -226,7 +360,6 @@ const styles = StyleSheet.create({
   },
   audioIcon: { color: palette.sageDark, fontSize: 38, fontWeight: '800' },
   audioTitle: { color: palette.white, fontSize: 22, fontWeight: '800' },
-  audioCopy: { color: palette.sage, fontSize: 14, marginTop: spacing.md, textAlign: 'center' },
   meter: {
     alignItems: 'center',
     flexDirection: 'row',

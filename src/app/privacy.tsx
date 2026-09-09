@@ -9,7 +9,7 @@ const POLICY_URL = 'https://tmoreton.github.io/nappio/#privacy-policy';
 const sections = [
   {
     title: 'What Nappio handles',
-    body: 'Nappio uses the Baby Unit camera and microphone only to provide live monitoring. It does not create user accounts, build advertising profiles, or provide recording. Optional notifications report sustained sound or an interrupted connection while monitoring is active.',
+    body: 'Nappio uses the Baby Unit camera and microphone for live monitoring. A Parent Unit uses its microphone only while push-to-talk is held. Nappio does not create user accounts, build advertising profiles, or provide recording. Optional notifications report sound, interruptions, or Baby Unit power concerns while monitoring is active.',
   },
   {
     title: 'Pairing and session data',
@@ -17,7 +17,7 @@ const sections = [
   },
   {
     title: 'Live audio and video',
-    body: 'LiveKit relays encrypted audio and video between the two phones. Media is encrypted on the devices and Nappio does not enable server-side recording. Cloudflare and LiveKit may process connection metadata and operational logs under their own privacy and security practices.',
+    body: 'LiveKit relays encrypted audio and video between the phones in a room. Media is encrypted on the devices and Nappio does not enable server-side recording. Cloudflare and LiveKit may process connection metadata and operational logs under their own privacy and security practices.',
   },
   {
     title: 'Storage and deletion',
@@ -37,7 +37,7 @@ export default function PrivacyScreen() {
         <Text style={styles.eyebrow}>LAST UPDATED SEPTEMBER 8, 2026</Text>
         <Text style={styles.title}>Privacy, in plain language.</Text>
         <Text style={styles.intro}>
-          Nappio is designed to make a temporary private connection between two phones with as little retained data as possible.
+          Nappio is designed to make a temporary private room between phones with as little retained data as possible.
         </Text>
         <View style={styles.sections}>
           {sections.map((section) => (

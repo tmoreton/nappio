@@ -1,6 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect x="176" y="176" width="672" height="672" rx="212" fill="#1c2d2a"/>
-  <circle cx="570" cy="458" r="208" fill="#f6f3ec"/>
-  <circle cx="671" cy="391" r="186" fill="#1c2d2a"/>
+  <defs>
+    <mask id="crescent">
+      <rect width="1024" height="1024" fill="#000"/>
+      <circle cx="570" cy="458" r="208" fill="#fff"/>
+      <circle cx="671" cy="391" r="186" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="1024" height="1024" fill="#f6f3ec" mask="url(#crescent)"/>
   <circle cx="352" cy="690" r="52" fill="#e4a387"/>
 </svg>

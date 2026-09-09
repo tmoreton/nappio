@@ -6,7 +6,7 @@ import type { MonitorSession, MonitorStatus } from '@/types/monitor';
 type BabyRoomProps = {
   session: MonitorSession;
   onStatusChange: (status: MonitorStatus) => void;
-  onParentConnectedChange: (connected: boolean) => void;
+  onParentCountChange: (count: number) => void;
   onError: (message: string) => void;
 };
 

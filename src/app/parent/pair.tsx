@@ -121,7 +121,9 @@ export default function PairScreen() {
         <View style={styles.intro}>
           <Text style={styles.eyebrow}>CONNECT PRIVATELY</Text>
           <Text style={styles.title}>Choose how to connect</Text>
-          <Text style={styles.copy}>Use the one-time code or QR code shown on the baby camera.</Text>
+          <Text style={styles.copy}>
+            Use the active room code or QR code shown on the baby camera.
+          </Text>
         </View>
 
         <View accessibilityRole="tablist" style={styles.methodPicker}>

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton } from '@/components/action-button';
+import { BrandMark } from '@/components/brand-mark';
 import { Screen } from '@/components/screen';
 import { palette, spacing, type } from '@/constants/design';
 import { resumeSession } from '@/pairing/api';
@@ -68,17 +69,14 @@ export default function HomeScreen() {
   return (
     <Screen contentStyle={styles.content} scroll>
       <View style={styles.brand}>
-        <View style={styles.mark} accessibilityElementsHidden>
-          <View style={styles.markMoon} />
-          <View style={styles.markStar} />
-        </View>
+        <BrandMark />
         <Text style={styles.wordmark}>Nappio</Text>
       </View>
 
       <View style={styles.main}>
         <View style={styles.hero}>
           <Text style={styles.title}>Choose a role.</Text>
-          <Text style={styles.subtitle}>How would you like to use this phone?</Text>
+          <Text style={styles.subtitle}>How would you like to use this device?</Text>
         </View>
 
         <View style={styles.actions}>
@@ -90,7 +88,7 @@ export default function HomeScreen() {
                   ? 'Restoring…'
                   : session.role === 'baby'
                     ? 'Resume baby camera'
-                    : 'Resume monitoring'
+                    : 'Rejoin recent room'
               }
               icon={session.role === 'baby' ? 'camera' : 'monitor'}
               disabled={isResuming}
@@ -141,32 +139,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
-  },
-  mark: {
-    backgroundColor: palette.ink,
-    borderRadius: 14,
-    height: 36,
-    overflow: 'hidden',
-    width: 36,
-  },
-  markMoon: {
-    backgroundColor: palette.canvas,
-    borderRadius: 13,
-    height: 23,
-    left: 10,
-    position: 'absolute',
-    top: 4,
-    width: 23,
-  },
-  markStar: {
-    backgroundColor: palette.peach,
-    borderRadius: 3,
-    height: 6,
-    left: 7,
-    position: 'absolute',
-    top: 23,
-    transform: [{ rotate: '45deg' }],
-    width: 6,
   },
   wordmark: {
     color: palette.ink,

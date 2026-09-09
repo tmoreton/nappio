@@ -1,14 +1,21 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { palette, spacing } from '@/constants/design';
+import type { BabyDeviceStatus } from '@/monitoring/baby-device-status';
+import type { SoundAlertSensitivity } from '@/monitoring/sound-alert-detector';
 import type { MonitorSession, MonitorStatus } from '@/types/monitor';
 
 type ParentRoomProps = {
   session: MonitorSession;
   audioOnly: boolean;
+  pipRequest: number;
+  talking: boolean;
+  soundSensitivity: SoundAlertSensitivity;
   onStatusChange: (status: MonitorStatus) => void;
   onBabyConnectedChange: (connected: boolean) => void;
+  onBabyDeviceStatusChange: (status: BabyDeviceStatus) => void;
   onSoundDetected: () => void;
+  onTalkError: (message: string) => void;
   onError: (message: string) => void;
 };
 

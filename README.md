@@ -1,6 +1,6 @@
 # Nappio
 
-Nappio turns two phones into a private baby monitor. The Baby Unit publishes its rear camera and microphone to LiveKit; the Parent Unit watches the encrypted stream or switches to true audio-only mode for locked-screen listening.
+Nappio turns phones into a private baby monitor. The Baby Unit publishes its rear camera and microphone to LiveKit; one or more Parent Units can watch the encrypted stream, talk back, or switch to true audio-only mode for locked-screen listening.
 
 This repository contains the Expo SDK 57 app, a local TypeScript pairing/token server, and a production Cloudflare Worker. Media travels through LiveKit and is never handled or recorded by the pairing server.
 
@@ -13,16 +13,21 @@ The public landing page is implemented as the web-specific home route. A GitHub 
 
 - Baby Unit camera and microphone publishing with local preview
 - screen wake lock and dimmed monitoring view
-- random single-use six-digit pairing codes with a five-minute expiry
+- reusable five-minute room invites by six-digit code or QR code
 - QR-code pairing and `nappio://` deep links
 - role-restricted server-generated LiveKit tokens
 - LiveKit E2EE for audio, video, and data frames
 - Parent Unit remote video and audio playback
+- multiple Parent Units in one room, each with independent session recovery
+- hold-to-talk audio from any Parent Unit to the Baby Unit
 - true audio-only mode that unsubscribes from camera tracks
 - automatic audio-only mode when the Parent app backgrounds
 - iOS background-audio capability and native audio-route picker
 - connected, reconnecting, disconnected, unavailable, and failure states
 - optional local alerts for sustained sound or a dropped connection while monitoring in the background
+- adjustable sound-alert sensitivity, a test alert, and time-sensitive iOS notifications
+- Baby Unit battery, charging, and freshness status with low-power alerts
+- manual iOS Picture in Picture for live video
 - 24-hour role-scoped session recovery protected by iOS Keychain or Android Keystore
 - request size limits, no-store responses, and per-address pairing rate limits
 - a public HTTPS pairing API backed by a SQLite Durable Object
@@ -34,7 +39,7 @@ The public landing page is implemented as the web-specific home route. A GitHub 
 
 - Node.js 22.13 or newer
 - Xcode 26.4 or newer for SDK 57 iOS builds
-- two physical iPhones for camera/microphone and lock-screen testing
+- two physical iPhones for the main flow; three for multi-parent testing
 - an Apple Developer team for installing development builds on physical devices
 - a LiveKit Cloud project and API key
 - a Cloudflare account for production Worker deployments
@@ -77,7 +82,7 @@ The TestFlight production environment uses:
 https://nappio-pairing-api.tmoreton89.workers.dev
 ```
 
-The Worker stores expiring, single-use pairing records, hashed session-recovery credentials, and distributed rate limits in a SQLite-backed Cloudflare Durable Object. LiveKit credentials are encrypted Worker secrets and are never compiled into the mobile app. Pairing codes expire in five minutes and resumable session records expire within 24 hours.
+The Worker stores expiring room invites, hashed session-recovery credentials, and distributed rate limits in a SQLite-backed Cloudflare Durable Object. LiveKit credentials are encrypted Worker secrets and are never compiled into the mobile app. An invite can add multiple Parent Units during its five-minute lifetime, and each resumable session record expires within 24 hours.
 
 For local Worker development, copy the existing ignored server environment file and start Wrangler:
 
@@ -132,33 +137,36 @@ npx expo-doctor
 EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
 ```
 
-## Two-phone test checklist
+## Physical-device test checklist
 
 1. Start the Baby Unit and allow camera/microphone access.
 2. Confirm the rear-camera preview appears and the app does not let the screen sleep.
 3. Enter or scan the displayed code on the Parent Unit.
-4. Confirm the Baby Unit says **Parent connected**.
+4. Confirm the Baby Unit says **1 parent connected**.
 5. Confirm live video and audio reach the Parent Unit.
-6. Tap **Audio Only** and verify network video reception stops in the LiveKit session view.
-7. Lock the Parent iPhone and listen continuously for at least 30 minutes.
-8. With monitoring alerts enabled, make sustained sound near the Baby Unit and verify the locked Parent phone receives a sound alert; then disconnect the Baby Unit and verify the interruption warning appears.
-9. Unlock it, tap **Show Video**, and verify video returns.
-10. Briefly enable airplane mode, then disable it and verify **Reconnecting** returns to **Monitoring live**.
-11. Force-quit and reopen each role, then use **Continue** and verify the same session reconnects.
-12. Repeat with Wi-Fi/cellular transitions and Bluetooth connect/disconnect.
-13. End monitoring from each role and verify the camera, microphone, audio session, and saved Continue action release.
+6. While the invite is still visible, join from a second Parent iPhone and confirm the Baby Unit says **2 parents connected** and both receive the stream.
+7. On each Parent Unit, hold **Hold to talk**, speak, and verify the Baby Unit plays audio only while the button is held.
+8. Tap **Audio Only** and verify network video reception stops in the LiveKit session view.
+9. Lock the Parent iPhone and listen continuously for at least 30 minutes.
+10. With monitoring alerts enabled, send a test alert, make sustained sound near the Baby Unit, and verify the locked Parent phone receives a sound alert; then disconnect the Baby Unit and verify the interruption warning appears.
+11. Confirm the Baby Unit battery/charging status updates, and verify the low-battery and unplugged alerts.
+12. Unlock it, tap **Show Video**, and verify video returns; on iOS, start **PiP** and verify video remains visible over another app.
+13. Briefly enable airplane mode, then disable it and verify **Reconnecting** returns to **Monitoring live**.
+14. Force-quit and reopen each role, then use **Continue** and verify the same session reconnects.
+15. Repeat with Wi-Fi/cellular transitions and Bluetooth connect/disconnect.
+16. End monitoring from each role and verify the camera, microphone, audio session, and saved Continue action release.
 
 ## Security notes
 
 - `server/.env` and all local `.env` variants are ignored by Git.
-- Baby tokens can publish only camera/microphone and cannot subscribe.
-- Parent tokens can subscribe and cannot publish.
-- Pairing codes are single-use and expire after five minutes.
-- Role-specific recovery tokens are stored only as SHA-256 hashes by the Worker and expire within 24 hours.
+- Baby tokens can publish only camera, microphone, and encrypted status data; they subscribe to Parent microphone audio for talk-back.
+- Parent tokens can subscribe and can publish only microphone audio; they cannot publish camera or data tracks.
+- Room invites can be reused by multiple Parent Units and expire after five minutes.
+- Each Parent Unit receives a separate recovery token. Role-specific recovery tokens are stored only as SHA-256 hashes by the Worker and expire within 24 hours.
 - E2EE keys are randomly generated per monitoring session and sent only by the pairing API.
 - The local server stores pairing records only in memory; restarting it clears them.
 - The production Worker stores pairing records and rate limits in one SQLite-backed Durable Object so create and claim operations remain atomic across Worker instances.
-- LiveKit token creation completes before a code is claimed, so a transient signing failure does not consume the code.
+- LiveKit token creation completes before a Parent session is stored, so a transient signing failure does not create a broken recovery credential.
 - The public health endpoint reports storage and LiveKit configuration without exposing credentials.
 
 ## Launch material

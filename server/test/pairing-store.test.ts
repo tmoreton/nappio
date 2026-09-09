@@ -3,9 +3,9 @@ import test from 'node:test';
 
 import { PairingStore, PairingStoreError } from '../src/pairing-store';
 
-const recoveryTokens = ['a'.repeat(43), 'b'.repeat(43)];
+const recoveryTokens = ['a'.repeat(43), 'b'.repeat(43), 'c'.repeat(43)];
 
-test('creates a private pairing and allows exactly one completed claim', () => {
+test('creates a private pairing and gives each parent a resumable claim', () => {
   let recoveryIndex = 0;
   const store = new PairingStore({
     ttlMs: 300_000,
@@ -28,10 +28,11 @@ test('creates a private pairing and allows exactly one completed claim', () => {
   assert.equal(store.resume(babyRecoveryToken).role, 'baby');
   assert.equal(store.completeClaim('482193', pending.recoveryToken, pending.requestId), pairing);
   assert.equal(store.resume(pending.recoveryToken).role, 'parent');
-  assert.throws(
-    () => store.beginClaim('482193'),
-    (error: unknown) => error instanceof PairingStoreError && error.code === 'already-used',
-  );
+
+  const secondParent = store.beginClaim('482193');
+  store.completeClaim('482193', secondParent.recoveryToken, secondParent.requestId);
+  assert.equal(store.resume(secondParent.recoveryToken).role, 'parent');
+  assert.notEqual(secondParent.recoveryToken, pending.recoveryToken);
 });
 
 test('rejects expired pairing codes while preserving the resumable baby session', () => {

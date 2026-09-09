@@ -31,7 +31,7 @@ export default function RootLayout() {
           <Stack.Screen name="support" options={{ title: 'Help & support' }} />
           <Stack.Screen
             name="parent/monitor"
-            options={{ title: 'Baby monitor', headerTransparent: true }}
+            options={{ headerShown: false }}
           />
         </Stack>
       </MonitorSessionProvider>

@@ -70,6 +70,7 @@ export async function notifyMonitoringInterrupted(reason: string): Promise<void>
       title: 'Nappio monitoring stopped',
       body: reason,
       sound: 'default',
+      interruptionLevel: 'timeSensitive',
       data: { kind: 'connection-interrupted' },
     },
     trigger: null,
@@ -84,7 +85,53 @@ export async function notifySoundDetected(): Promise<void> {
       title: 'Sound detected',
       body: 'Nappio heard sustained sound from the Baby Unit. Open Nappio to listen.',
       sound: 'default',
+      interruptionLevel: 'timeSensitive',
       data: { kind: 'sound-detected' },
+    },
+    trigger: null,
+  });
+}
+
+export async function notifyMonitoringTest(): Promise<void> {
+  const permission = await getMonitoringAlertPermission();
+  if (permission !== 'granted') return;
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Nappio alerts are working',
+      body: 'You will hear an alert for sustained sound, a lost connection, or low Baby Unit power.',
+      sound: 'default',
+      interruptionLevel: 'timeSensitive',
+      data: { kind: 'monitoring-test' },
+    },
+    trigger: null,
+  });
+}
+
+export async function notifyBabyBatteryLow(percentage: number): Promise<void> {
+  const permission = await getMonitoringAlertPermission();
+  if (permission !== 'granted') return;
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Baby Unit battery is low',
+      body: `The Baby Unit has ${Math.max(0, Math.min(100, Math.round(percentage)))}% battery remaining. Connect it to power.`,
+      sound: 'default',
+      interruptionLevel: 'timeSensitive',
+      data: { kind: 'baby-battery-low' },
+    },
+    trigger: null,
+  });
+}
+
+export async function notifyBabyPowerDisconnected(): Promise<void> {
+  const permission = await getMonitoringAlertPermission();
+  if (permission !== 'granted') return;
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Baby Unit unplugged',
+      body: 'The Baby Unit stopped charging. Check its power connection.',
+      sound: 'default',
+      interruptionLevel: 'timeSensitive',
+      data: { kind: 'baby-power-disconnected' },
     },
     trigger: null,
   });

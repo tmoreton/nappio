@@ -159,7 +159,7 @@ export function createPairingServer({ config, tokens, store, limiter }: ServerDe
           expiresAt: pairing.expiresAt.toISOString(),
           sessionExpiresAt: pairing.sessionExpiresAt.toISOString(),
           pairingCode:
-            role === 'baby' && pairing.expiresAt.getTime() > Date.now() && !pairing.claimed
+            role === 'baby' && pairing.expiresAt.getTime() > Date.now()
               ? pairing.pairingCode
               : undefined,
           recoveryToken,
@@ -171,7 +171,6 @@ export function createPairingServer({ config, tokens, store, limiter }: ServerDe
     } catch (error) {
       if (error instanceof PairingStoreError) {
         const result = {
-          'already-used': [409, 'That pairing code has already been used.'],
           expired: [410, 'That pairing code has expired.'],
           'not-found': [404, 'That pairing code was not found.'],
           'request-conflict': [409, 'That request was already used for another pairing code.'],

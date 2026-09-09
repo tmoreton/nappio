@@ -23,7 +23,7 @@ class FakeTokens implements TokenService {
   }
 }
 
-test('create/join API returns role tokens and makes codes single-use', async () => {
+test('create/join API gives multiple parents independent resumable sessions', async () => {
   const store = new PairingStore({
     ttlMs: config.pairingTtlMs,
     sessionTtlMs: config.sessionTtlMs,
@@ -31,7 +31,7 @@ test('create/join API returns role tokens and makes codes single-use', async () 
     roomIdGenerator: () => 'monitor-room',
     keyGenerator: () => 'e2ee-key',
     recoveryTokenGenerator: (() => {
-      const tokens = ['a'.repeat(43), 'b'.repeat(43)];
+      const tokens = ['a'.repeat(43), 'b'.repeat(43), 'c'.repeat(43)];
       let index = 0;
       return () => tokens[index++]!;
     })(),
@@ -96,12 +96,36 @@ test('create/join API returns role tokens and makes codes single-use', async () 
     assert.equal(resumed.token, 'parent-token-for-monitor-room');
     assert.equal(resumed.recoveryToken, joined.parentRecoveryToken);
 
-    const replay = await fetch(`${baseUrl}/api/pair/join`, {
+    const secondJoinRequestId = '33333333-3333-4333-8333-333333333333';
+    const secondJoinedResponse = await fetch(`${baseUrl}/api/pair/join`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': secondJoinRequestId },
       body: JSON.stringify({ pairingCode: '482193' }),
     });
-    assert.equal(replay.status, 409);
+    assert.equal(secondJoinedResponse.status, 200);
+    const secondJoined = (await secondJoinedResponse.json()) as Record<string, string>;
+    assert.equal(secondJoined.roomId, created.roomId);
+    assert.notEqual(secondJoined.parentRecoveryToken, joined.parentRecoveryToken);
+
+    const resumedSecondResponse = await fetch(`${baseUrl}/api/session/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recoveryToken: secondJoined.parentRecoveryToken }),
+    });
+    assert.equal(resumedSecondResponse.status, 200);
+    const resumedSecond = (await resumedSecondResponse.json()) as Record<string, string>;
+    assert.equal(resumedSecond.role, 'parent');
+    assert.equal(resumedSecond.roomId, created.roomId);
+
+    const resumedBabyResponse = await fetch(`${baseUrl}/api/session/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recoveryToken: created.babyRecoveryToken }),
+    });
+    assert.equal(resumedBabyResponse.status, 200);
+    const resumedBaby = (await resumedBabyResponse.json()) as Record<string, string>;
+    assert.equal(resumedBaby.role, 'baby');
+    assert.equal(resumedBaby.pairingCode, created.pairingCode);
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
