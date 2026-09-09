@@ -97,6 +97,12 @@ async function exerciseRoom(index, durations) {
     const created = await post('/api/pair/create', undefined, clientId);
     durations.push(created.durationMs);
     babyRecoveryToken = created.payload.babyRecoveryToken;
+    if (healthPayload.routing === 'sharded') {
+      const tokenShard = babyRecoveryToken.match(/^s(\d{2})_[A-Za-z0-9_-]{43}$/)?.[1];
+      if (!tokenShard || !created.payload.pairingCode.startsWith(tokenShard)) {
+        throw new Error('The routed Baby credential did not match its pairing-code shard.');
+      }
+    }
 
     const joined = await post(
       '/api/pair/join',
@@ -104,6 +110,12 @@ async function exerciseRoom(index, durations) {
       clientId,
     );
     durations.push(joined.durationMs);
+    if (
+      healthPayload.routing === 'sharded' &&
+      !joined.payload.parentRecoveryToken.startsWith(`s${created.payload.pairingCode.slice(0, 2)}_`)
+    ) {
+      throw new Error('The Parent credential did not match its pairing-code shard.');
+    }
 
     const [babyResume, parentResume, babyTicket, parentTicket] = await Promise.all([
       post('/api/session/resume', { recoveryToken: babyRecoveryToken }, clientId),
@@ -117,6 +129,12 @@ async function exerciseRoom(index, durations) {
       babyTicket.durationMs,
       parentTicket.durationMs,
     );
+    if (
+      healthPayload.turn === 'configured' &&
+      !babyTicket.payload.iceServers.some((server) => server.username && server.credential)
+    ) {
+      throw new Error('The signaling ticket did not include configured TURN credentials.');
+    }
 
     const babySignal = await openSignaling(babyTicket.payload.signalingUrl, 'baby');
     sockets.push(babySignal.socket);
@@ -139,6 +157,7 @@ async function exerciseRoom(index, durations) {
 
 const health = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(10_000) });
 if (!health.ok) throw new Error(`Health check returned ${health.status}.`);
+const healthPayload = await health.json();
 
 const durations = [];
 const started = performance.now();
