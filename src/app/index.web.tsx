@@ -102,6 +102,32 @@ export default function LandingPage() {
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://tmoreton.github.io/nappio/" />
+        <meta property="og:site_name" content="Nappio" />
+        <meta
+          property="og:image"
+          content="https://tmoreton.github.io/nappio/og.png"
+        />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1731" />
+        <meta property="og:image:height" content="909" />
+        <meta
+          property="og:image:alt"
+          content="Nappio — Rest easy. Stay close. A private baby monitor between your devices."
+        />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Nappio — Rest easy. Stay close." />
+        <meta
+          name="twitter:description"
+          content="An encrypted baby monitor made from the phones you already have."
+        />
+        <meta
+          name="twitter:image"
+          content="https://tmoreton.github.io/nappio/og.png"
+        />
+        <meta
+          name="twitter:image:alt"
+          content="Nappio — Rest easy. Stay close. A private baby monitor between your devices."
+        />
         <link rel="canonical" href="https://tmoreton.github.io/nappio/" />
       </Head>
 
