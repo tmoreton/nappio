@@ -55,7 +55,7 @@ sequenceDiagram
 | Connection route (`direct` or `relay`) | Anonymous Worker operational log | Controlled by the deployer's Cloudflare log settings |
 | One-way room attribution ID | Cloudflare TURN credentials and analytics | Controlled by the deployer's TURN and analytics settings |
 
-Cloudflare may process network metadata and operational logs under its own terms. See the [privacy implementation notes](docs/app-store-privacy.md) before operating a public deployment.
+Cloudflare may process network metadata and operational logs under its own terms. See the [privacy implementation notes](project-docs/app-store-privacy.md) before operating a public deployment.
 
 ## Architecture
 
@@ -79,7 +79,8 @@ The separate peer connection per Parent keeps the server simple and avoids an al
 | `worker` | Cloudflare Worker, Durable Object, tests, and Wrangler configuration |
 | `test` | Platform-independent app unit tests |
 | `scripts` | Bounded load and TURN-usage checks |
-| `docs` | Production, privacy, release, and store documentation |
+| `docs` | Generated static website published by GitHub Pages |
+| `project-docs` | Production, privacy, release, and store documentation |
 
 ## Requirements
 
@@ -170,20 +171,20 @@ Run the repeatable local checks:
 ```sh
 npm run check
 npx expo-doctor
-npx expo export --platform web
+npm run site:build
 npm --prefix worker run deploy -- --dry-run
 ```
 
 For a bounded API probe, start the local Worker and run `npm run worker:load-test`. It creates 25 rooms by default, ends every room it creates, and refuses to target a production URL unless `ALLOW_PRODUCTION_LOAD_TEST=true` is explicitly set.
 
-Automated checks cannot validate camera, background audio, Bluetooth routing, radio transitions, or real TURN behavior. Complete the [physical-device test checklist](docs/physical-device-testing.md) before a production release.
+Automated checks cannot validate camera, background audio, Bluetooth routing, radio transitions, or real TURN behavior. Complete the [physical-device test checklist](project-docs/physical-device-testing.md) before a production release.
 
 ## Operating the official deployment
 
-- [Production runbook](docs/production-runbook.md)
-- [Launch checklist](docs/launch-checklist.md)
-- [App Store metadata draft](docs/app-store-metadata.md)
-- [App Store privacy notes](docs/app-store-privacy.md)
+- [Production runbook](project-docs/production-runbook.md)
+- [Launch checklist](project-docs/launch-checklist.md)
+- [App Store metadata draft](project-docs/app-store-metadata.md)
+- [App Store privacy notes](project-docs/app-store-privacy.md)
 
 The official workflows require repository and environment secrets for Cloudflare and Expo. No secret belongs in source control, an issue, a screenshot, or an app-visible environment variable.
 

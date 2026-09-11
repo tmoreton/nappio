@@ -36,11 +36,11 @@ Run these checks before submitting a pull request:
 ```sh
 npm run check
 npx expo-doctor
-npx expo export --platform web
+npm run site:build
 npm --prefix worker run deploy -- --dry-run
 ```
 
-Changes affecting media, permissions, background execution, or connectivity also need the relevant cases from [docs/physical-device-testing.md](docs/physical-device-testing.md). State which devices and network combinations you tested in the pull request.
+Changes affecting media, permissions, background execution, or connectivity also need the relevant cases from [project-docs/physical-device-testing.md](project-docs/physical-device-testing.md). State which devices and network combinations you tested in the pull request.
 
 ## Pull requests
 
