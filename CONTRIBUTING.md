@@ -1,10 +1,10 @@
-# Contributing to Nappio
+# Contributing to NapNear
 
-Thanks for helping improve Nappio. The project favors a small, dependable monitoring flow over a large feature surface.
+Thanks for helping improve NapNear. The project favors a small, dependable monitoring flow over a large feature surface.
 
 ## Before opening an issue
 
-- Search existing issues and include the app platform, OS version, network types, and Nappio commit or build version.
+- Search existing issues and include the app platform, OS version, network types, and NapNear commit or build version.
 - Remove pairing codes, recovery tokens, TURN credentials, identifiable media, and private room details from logs and screenshots.
 - Use the private process in [SECURITY.md](SECURITY.md) for anything that could expose a monitoring room or credential.
 
@@ -46,4 +46,4 @@ Changes affecting media, permissions, background execution, or connectivity also
 
 Explain the user-visible outcome, the important implementation choices, verification performed, and any rollout or compatibility risk. Keep generated native folders out of the pull request unless the change explicitly requires native source changes.
 
-Unless you explicitly state otherwise, a contribution intentionally submitted for inclusion in Nappio is provided under the Apache License 2.0, as described in section 5 of the license.
+Unless you explicitly state otherwise, a contribution intentionally submitted for inclusion in NapNear is provided under the Apache License 2.0, as described in section 5 of the license.

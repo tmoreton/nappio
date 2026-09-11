@@ -37,7 +37,7 @@ function BrandMark() {
 
 function CameraPreview() {
   return (
-    <div className={styles.phone} aria-label="Preview of the Nappio baby camera screen">
+    <div className={styles.phone} aria-label="Preview of the NapNear baby camera screen">
       <div className={styles.phoneNotch} />
       <div className={styles.cameraScene}>
         <div className={styles.sceneGlow} />
@@ -62,7 +62,7 @@ function CameraPreview() {
 function AudioPreview() {
   const bars = [36, 58, 82, 48, 96, 68, 44, 74, 52];
   return (
-    <div className={`${styles.phone} ${styles.parentPhone}`} aria-label="Preview of Nappio audio-only monitoring">
+    <div className={`${styles.phone} ${styles.parentPhone}`} aria-label="Preview of NapNear audio-only monitoring">
       <div className={styles.phoneNotch} />
       <div className={styles.audioScreen}>
         <div className={styles.listeningPill}>
@@ -89,20 +89,20 @@ export default function LandingPage() {
   return (
     <>
       <Head>
-        <title>Nappio — A private baby monitor between phones</title>
+        <title>NapNear — A private baby monitor between phones</title>
         <meta
           name="description"
           content="Turn your iPhone or iPad into an encrypted baby monitor with live video, talk-back, lock-screen audio, and private room invites."
         />
         <meta name="theme-color" content="#f6f3ec" />
-        <meta property="og:title" content="Nappio — Rest easy. Stay close." />
+        <meta property="og:title" content="NapNear — Rest easy. Stay close." />
         <meta
           property="og:description"
           content="An encrypted baby monitor made from the phones you already have."
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://tmoreton.github.io/nappio/" />
-        <meta property="og:site_name" content="Nappio" />
+        <meta property="og:site_name" content="NapNear" />
         <meta
           property="og:image"
           content="https://tmoreton.github.io/nappio/og.png"
@@ -112,10 +112,10 @@ export default function LandingPage() {
         <meta property="og:image:height" content="909" />
         <meta
           property="og:image:alt"
-          content="Nappio — Rest easy. Stay close. A private baby monitor between your devices."
+          content="NapNear — Rest easy. Stay close. A private baby monitor between your devices."
         />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Nappio — Rest easy. Stay close." />
+        <meta name="twitter:title" content="NapNear — Rest easy. Stay close." />
         <meta
           name="twitter:description"
           content="An encrypted baby monitor made from the phones you already have."
@@ -126,16 +126,16 @@ export default function LandingPage() {
         />
         <meta
           name="twitter:image:alt"
-          content="Nappio — Rest easy. Stay close. A private baby monitor between your devices."
+          content="NapNear — Rest easy. Stay close. A private baby monitor between your devices."
         />
         <link rel="canonical" href="https://tmoreton.github.io/nappio/" />
       </Head>
 
       <div className={styles.site}>
         <header className={styles.header}>
-          <a className={styles.brand} href="#top" aria-label="Nappio home">
+          <a className={styles.brand} href="#top" aria-label="NapNear home">
             <BrandMark />
-            <span>Nappio</span>
+            <span>NapNear</span>
           </a>
           <nav aria-label="Main navigation">
             <a href="#how-it-works">How it works</a>
@@ -157,7 +157,7 @@ export default function LandingPage() {
                 <a className={styles.primaryCta} href="#beta">Join the TestFlight beta <span>↗</span></a>
                 <a className={styles.textLink} href="#how-it-works">See how it works <span>↓</span></a>
               </div>
-              <div className={styles.trustRow} aria-label="Nappio product highlights">
+              <div className={styles.trustRow} aria-label="NapNear product highlights">
                 <span>No account</span>
                 <span>Private room invites</span>
                 <span>No recording</span>
@@ -215,7 +215,7 @@ export default function LandingPage() {
           <section className={styles.beta} id="beta">
             <div>
               <p className={styles.eyebrow}>FIRST NIGHT SOON</p>
-              <h2>Nappio is coming to the App Store.</h2>
+              <h2>NapNear is coming to the App Store.</h2>
               <p>Built for iPhone and iPad, with a private TestFlight beta available now.</p>
             </div>
             <div className={styles.betaBadge}>
@@ -229,7 +229,7 @@ export default function LandingPage() {
               <p className={styles.eyebrow}>PRIVACY POLICY · UPDATED SEPTEMBER 9, 2026</p>
               <h2>Private by design, explained plainly.</h2>
               <p>
-                Nappio makes a temporary private room between phones. It does not create accounts, sell personal information, use advertising analytics, or provide recording.
+                NapNear makes a temporary private room between phones. It does not create accounts, sell personal information, use advertising analytics, or provide recording.
               </p>
             </div>
             <div className={styles.legalGrid}>
@@ -243,7 +243,7 @@ export default function LandingPage() {
               </article>
               <article>
                 <h3>Encrypted live media</h3>
-                <p>WebRTC sends encrypted media directly between phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. Nappio does not provide server-side recording. To operate and budget the service, Nappio records whether a Parent connection was direct or relayed and gives TURN a one-way room identifier. Cloudflare may process connection metadata and operational logs under its privacy and security practices.</p>
+                <p>WebRTC sends encrypted media directly between phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. NapNear does not provide server-side recording. To operate and budget the service, NapNear records whether a Parent connection was direct or relayed and gives TURN a one-way room identifier. Cloudflare may process connection metadata and operational logs under its privacy and security practices.</p>
               </article>
               <article>
                 <h3>On-device storage and deletion</h3>
@@ -251,11 +251,11 @@ export default function LandingPage() {
               </article>
               <article>
                 <h3>Children and safety</h3>
-                <p>Nappio is intended for adults and does not request a child profile or intentionally collect information directly from children. It is not a medical device or a substitute for adult supervision.</p>
+                <p>NapNear is intended for adults and does not request a child profile or intentionally collect information directly from children. It is not a medical device or a substitute for adult supervision.</p>
               </article>
               <article>
                 <h3>Questions and requests</h3>
-                <p>For privacy questions, access or deletion requests, email <a href="mailto:tmoreton89@gmail.com?subject=Nappio%20privacy">tmoreton89@gmail.com</a>.</p>
+                <p>For privacy questions, access or deletion requests, email <a href="mailto:tmoreton89@gmail.com?subject=NapNear%20privacy">tmoreton89@gmail.com</a>.</p>
               </article>
             </div>
           </section>
@@ -263,20 +263,20 @@ export default function LandingPage() {
           <section className={styles.support} id="support">
             <div>
               <p className={styles.eyebrow}>HELP WHEN YOU NEED IT</p>
-              <h2>Nappio support</h2>
+              <h2>NapNear support</h2>
               <p>For connection help, beta feedback, or a technical problem, contact the developer directly.</p>
             </div>
             <div className={styles.supportActions}>
-              <a className={styles.primaryCta} href="mailto:tmoreton89@gmail.com?subject=Nappio%20support">Email support <span>↗</span></a>
+              <a className={styles.primaryCta} href="mailto:tmoreton89@gmail.com?subject=NapNear%20support">Email support <span>↗</span></a>
               <a className={styles.textLink} href="https://github.com/tmoreton/nappio/issues/new">Report an issue <span>↗</span></a>
             </div>
           </section>
         </main>
 
         <footer className={styles.footer}>
-          <div className={styles.brand}><BrandMark /><span>Nappio</span></div>
-          <p>Nappio is not a medical device and is not a substitute for adult supervision.</p>
-          <span><a href="#privacy-policy">Privacy</a> · <a href="#support">Support</a><br />© 2026 Nappio</span>
+          <div className={styles.brand}><BrandMark /><span>NapNear</span></div>
+          <p>NapNear is not a medical device and is not a substitute for adult supervision.</p>
+          <span><a href="#privacy-policy">Privacy</a> · <a href="#support">Support</a><br />© 2026 NapNear</span>
         </footer>
       </div>
     </>

@@ -1,4 +1,4 @@
-name: Verify Nappio changes
+name: Verify NapNear changes
 
 on:
   pull_request:

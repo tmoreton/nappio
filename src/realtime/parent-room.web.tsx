@@ -8,7 +8,6 @@ import type { MonitorSession, MonitorStatus } from '@/types/monitor';
 type ParentRoomProps = {
   session: MonitorSession;
   audioOnly: boolean;
-  pipRequest: number;
   talking: boolean;
   soundSensitivity: SoundAlertSensitivity;
   onStatusChange: (status: MonitorStatus) => void;
@@ -24,7 +23,7 @@ export function ParentRoom(_props: ParentRoomProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.icon}>♪</Text>
-      <Text style={styles.title}>Open Nappio’s development build on a phone</Text>
+      <Text style={styles.title}>Open NapNear’s development build on a phone</Text>
       <Text style={styles.copy}>
         The web preview verifies the product flow; direct WebRTC monitoring runs in the iOS and
         Android builds.

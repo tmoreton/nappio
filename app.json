@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Nappio",
+    "name": "NapNear",
     "slug": "Nappio",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -59,21 +59,10 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Nappio to use the camera for live baby monitoring and QR pairing.",
-          "microphonePermission": "Allow Nappio to use the microphone for live monitoring and push-to-talk.",
+          "cameraPermission": "Allow NapNear to use the camera for live baby monitoring and QR pairing.",
+          "microphonePermission": "Allow NapNear to use the microphone for live monitoring and push-to-talk.",
           "recordAudioAndroid": true,
           "barcodeScannerEnabled": true
-        }
-      ],
-      [
-        "@livekit/react-native-expo-plugin",
-        {
-          "android": {
-            "audioType": "communication"
-          },
-          "ios": {
-            "enableMultitaskingCameraAccess": false
-          }
         }
       ],
       "@config-plugins/react-native-webrtc",

@@ -4,12 +4,12 @@ Use this worksheet when completing **App Privacy** in App Store Connect. It refl
 
 ## Confirmed behavior
 
-- Nappio has no accounts, ads, cross-app tracking, analytics SDK, or server-side recording.
+- NapNear has no accounts, ads, cross-app tracking, analytics SDK, or server-side recording.
 - Live camera and microphone media is WebRTC-encrypted. It travels directly between devices when possible and through Cloudflare TURN only when a relay is needed.
 - The pairing service temporarily stores a random pairing code, room identifier, hashed recovery credentials, single-use signaling tickets, and expiry timestamps. Pairing codes expire after five minutes. Active role-scoped session records renew for 30 days at a time and are deleted when ended or expired.
 - The app generates a random installation UUID, stores it in iOS Keychain or Android Keystore, and sends it only when creating or joining a room. It is not an Apple advertising identifier. The pairing service retains it in an abuse-prevention counter for approximately one minute.
 - Cloudflare also processes network addresses for a one-minute edge abuse-prevention counter.
-- Cloudflare Worker observability is enabled. Nappio writes an anonymous `direct` or `relay` connection-path event, without a room, device, or recovery identifier, to estimate relay use.
+- Cloudflare Worker observability is enabled. NapNear writes an anonymous `direct` or `relay` connection-path event, without a room, device, or recovery identifier, to estimate relay use.
 - Cloudflare Realtime TURN receives a one-way hash-derived room identifier and may process connection metadata and operational logs. Confirm the production account's retention and support-access settings.
 
 ## Recommended App Store Connect answers

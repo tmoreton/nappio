@@ -8,8 +8,8 @@ const POLICY_URL = 'https://tmoreton.github.io/nappio/#privacy-policy';
 
 const sections = [
   {
-    title: 'What Nappio handles',
-    body: 'Nappio uses the Baby Unit camera and microphone for live monitoring. A Parent Unit uses its microphone only while push-to-talk is held. Nappio does not create user accounts, build advertising profiles, or provide recording. Optional notifications report sound, interruptions, or Baby Unit power concerns while monitoring is active.',
+    title: 'What NapNear handles',
+    body: 'NapNear uses the Baby Unit camera and microphone for live monitoring. A Parent Unit uses its microphone only while push-to-talk is held. NapNear does not create user accounts, build advertising profiles, or provide recording. Optional notifications report sound, interruptions, or Baby Unit power concerns while monitoring is active.',
   },
   {
     title: 'Pairing and session data',
@@ -17,7 +17,7 @@ const sections = [
   },
   {
     title: 'Live audio and video',
-    body: 'WebRTC sends encrypted audio and video directly between the phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. Nappio does not provide server-side recording. To operate and budget the service, Nappio records whether a Parent connection was direct or relayed and gives TURN a one-way room identifier. Cloudflare may process connection metadata and operational logs under its privacy and security practices.',
+    body: 'WebRTC sends encrypted audio and video directly between the phones whenever possible. If a direct path is blocked, Cloudflare TURN forwards the encrypted packets. NapNear does not provide server-side recording. To operate and budget the service, NapNear records whether a Parent connection was direct or relayed and gives TURN a one-way room identifier. Cloudflare may process connection metadata and operational logs under its privacy and security practices.',
   },
   {
     title: 'Storage and deletion',
@@ -25,7 +25,7 @@ const sections = [
   },
   {
     title: 'Children and safety',
-    body: 'Nappio is intended for use by adults and does not ask for a child profile or intentionally collect information directly from children. Nappio is not a medical device and is not a substitute for adult supervision.',
+    body: 'NapNear is intended for use by adults and does not ask for a child profile or intentionally collect information directly from children. NapNear is not a medical device and is not a substitute for adult supervision.',
   },
 ];
 
@@ -37,7 +37,7 @@ export default function PrivacyScreen() {
         <Text style={styles.eyebrow}>LAST UPDATED SEPTEMBER 9, 2026</Text>
         <Text style={styles.title}>Privacy, in plain language.</Text>
         <Text style={styles.intro}>
-          Nappio is designed to make a temporary private room between phones with as little retained data as possible.
+          NapNear is designed to make a temporary private room between phones with as little retained data as possible.
         </Text>
         <View style={styles.sections}>
           {sections.map((section) => (
@@ -48,7 +48,7 @@ export default function PrivacyScreen() {
           ))}
         </View>
         <Text style={styles.body}>
-          Nappio does not sell personal information or use third-party advertising analytics. For questions or privacy requests, email tmoreton89@gmail.com.
+          NapNear does not sell personal information or use third-party advertising analytics. For questions or privacy requests, email tmoreton89@gmail.com.
         </Text>
         <Pressable
           accessibilityRole="link"

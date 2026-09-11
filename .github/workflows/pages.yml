@@ -1,4 +1,4 @@
-name: Deploy Nappio landing page
+name: Deploy NapNear landing page
 
 on:
   push:

@@ -30,7 +30,7 @@ export default function OnboardingScreen() {
       <View style={styles.topBar}>
         <View style={styles.brand}>
           <BrandMark size={32} />
-          <Text style={styles.wordmark}>Nappio</Text>
+          <Text style={styles.wordmark}>NapNear</Text>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -51,7 +51,7 @@ export default function OnboardingScreen() {
           What will this device do?
         </Text>
         <Text style={styles.body}>
-          Choose a role now. Nappio will ask only for the permissions that role needs.
+          Choose a role now. NapNear will ask only for the permissions that role needs.
         </Text>
 
         <View style={styles.actions}>
@@ -81,7 +81,7 @@ export default function OnboardingScreen() {
       </View>
 
       <Text style={styles.safety}>
-        Nappio is not a medical device or a replacement for direct adult supervision.
+        NapNear is not a medical device or a replacement for direct adult supervision.
       </Text>
     </Screen>
   );

@@ -1,8 +1,8 @@
-# Nappio App Store metadata
+# NapNear App Store metadata
 
 ## App name
 
-Nappio Baby Monitor
+NapNear Baby Monitor
 
 ## URLs
 
@@ -20,11 +20,11 @@ Turn your iPhone or iPad into a simple encrypted baby monitor with live video, t
 
 ## Description
 
-Nappio creates a private baby-monitor room using the phones and tablets you already have.
+NapNear creates a private baby-monitor room using the phones and tablets you already have.
 
 Place one iPhone or iPad near the crib as the Baby Unit. On each Parent Unit, scan the QR code or enter the active six-digit room code. Watch live video, hold to talk back, or switch to Audio Only for quieter overnight listening.
 
-Nappio includes:
+NapNear includes:
 
 - Live camera and microphone monitoring
 - WebRTC-encrypted phone-to-phone media
@@ -32,11 +32,12 @@ Nappio includes:
 - Push-to-talk audio from a Parent Unit to the Baby Unit
 - Audio-only monitoring designed for a locked Parent device
 - Optional sound, connection, and Baby Unit power alerts
-- Adjustable sound-alert sensitivity and iOS Picture in Picture
+- Monitoring that stays active when the Parent app is backgrounded or its screen is locked
+- Adjustable sound-alert sensitivity
 - Secure session recovery after reopening the app
 - No account and no built-in recording
 
-Nappio is not a medical device and is not a substitute for adult supervision.
+NapNear is not a medical device and is not a substitute for adult supervision.
 
 ## Keywords
 
@@ -44,7 +45,7 @@ baby monitor,parenting,audio monitor,video monitor,encrypted,nursery,sleep
 
 ## App Review notes
 
-Nappio requires two physical iPhones or iPads for its primary flow and does not require an account.
+NapNear requires two physical iPhones or iPads for its primary flow and does not require an account.
 
 1. On the first device, tap **Baby camera** and allow camera and microphone access.
 2. Leave the pairing code visible.

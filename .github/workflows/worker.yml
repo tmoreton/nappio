@@ -1,4 +1,4 @@
-name: Deploy Nappio pairing Worker
+name: Deploy NapNear pairing Worker
 
 on:
   push:

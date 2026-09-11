@@ -49,7 +49,7 @@ async function nextMessage(socket: WebSocket) {
   return JSON.parse(await nextSocketData(socket)) as Record<string, unknown>;
 }
 
-describe('Nappio pairing Worker', () => {
+describe('NapNear pairing Worker', () => {
   it('reports configured signaling with STUN-only local fallback', async () => {
     const response = await exports.default.fetch('https://nappio.test/health');
     expect(response.status).toBe(200);

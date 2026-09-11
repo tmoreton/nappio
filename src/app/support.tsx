@@ -8,7 +8,7 @@ const troubleshooting = [
   'Keep both phones online and leave the Baby Unit connected to power for long sessions.',
   'If a code expires, end the Baby Unit session and start it again for a new code.',
   'Allow camera and microphone access on the Baby Unit. Allow notifications and notification sounds on the Parent Unit for sound and interruption alerts.',
-  'If audio stops after locking the Parent phone, reopen Nappio and confirm that Monitoring live is visible before locking again.',
+  'If audio stops after locking the Parent phone, reopen NapNear and confirm that Monitoring live is visible before locking again.',
 ];
 
 export default function SupportScreen() {
@@ -16,7 +16,7 @@ export default function SupportScreen() {
     <>
       <Stack.Screen options={{ title: 'Help & support' }} />
       <Screen edges={['bottom', 'left', 'right']} scroll contentStyle={styles.content}>
-        <Text style={styles.eyebrow}>NAPPIO SUPPORT</Text>
+        <Text style={styles.eyebrow}>NAPNEAR SUPPORT</Text>
         <Text style={styles.title}>Let’s get monitoring working.</Text>
         <Text style={styles.intro}>
           Most connection problems are resolved by confirming permissions, connectivity, and an active room code.
@@ -30,7 +30,7 @@ export default function SupportScreen() {
           ))}
         </View>
         <Text style={styles.safety}>
-          Nappio is not a medical device. Always use direct adult supervision and never rely on a phone connection as the only safety measure.
+          NapNear is not a medical device. Always use direct adult supervision and never rely on a phone connection as the only safety measure.
         </Text>
         <View style={styles.actions}>
           <Pressable
@@ -41,7 +41,7 @@ export default function SupportScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="link"
-            onPress={() => void Linking.openURL('mailto:tmoreton89@gmail.com?subject=Nappio%20support')}
+            onPress={() => void Linking.openURL('mailto:tmoreton89@gmail.com?subject=NapNear%20support')}
             style={({ pressed }) => [styles.primary, pressed && styles.pressed]}>
             <Text style={styles.primaryText}>Email support</Text>
           </Pressable>

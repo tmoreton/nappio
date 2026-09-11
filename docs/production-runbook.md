@@ -1,4 +1,4 @@
-# Nappio production runbook
+# NapNear production runbook
 
 ## Production services
 
@@ -14,7 +14,7 @@ Worker secrets, set with `wrangler secret put`, are `SESSION_SECRET`, `TURN_KEY_
 
 The GitHub repository needs `CLOUDFLARE_ACCOUNT_ID`. Its `production` environment needs:
 
-- `CLOUDFLARE_API_TOKEN`, scoped to the Nappio Worker deployment permissions for this account
+- `CLOUDFLARE_API_TOKEN`, scoped to the NapNear Worker deployment permissions for this account
 - deployment protection and a reviewer if the repository plan supports it
 
 Repository Actions also needs `CLOUDFLARE_ANALYTICS_TOKEN` with account analytics read access. Set `TURN_DAILY_EGRESS_WARN_GB` to the daily egress level that should fail the TURN usage workflow; the default is 30 GB.

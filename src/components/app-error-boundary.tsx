@@ -14,7 +14,7 @@ export class AppErrorBoundary extends Component<PropsWithChildren, AppErrorBound
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('Nappio encountered an unrecoverable screen error.', error, info.componentStack);
+    console.error('NapNear encountered an unrecoverable screen error.', error, info.componentStack);
   }
 
   private restart = () => {
@@ -27,7 +27,7 @@ export class AppErrorBoundary extends Component<PropsWithChildren, AppErrorBound
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.content}>
-          <Text style={styles.eyebrow}>NAPPIO NEEDS A FRESH START</Text>
+          <Text style={styles.eyebrow}>NAPNEAR NEEDS A FRESH START</Text>
           <Text style={styles.title}>Something unexpected happened.</Text>
           <Text style={styles.copy}>
             Return home and reconnect. If monitoring was active, the saved session may still be available.

@@ -1,4 +1,4 @@
-name: Monitor Nappio production health
+name: Monitor NapNear production health
 
 on:
   schedule:
@@ -25,4 +25,4 @@ jobs:
         run: |
           page=$(curl --fail --silent --show-error --retry 3 --retry-delay 5 https://tmoreton.github.io/nappio/)
           echo "$page" | grep -q 'privacy-policy'
-          echo "$page" | grep -q 'Nappio support'
+          echo "$page" | grep -q 'NapNear support'

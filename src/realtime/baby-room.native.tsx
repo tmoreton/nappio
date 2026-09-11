@@ -4,14 +4,13 @@ import {
   type MediaStreamTrack,
   RTCPeerConnection,
   RTCView,
-} from '@livekit/react-native-webrtc';
+} from 'react-native-webrtc';
 import * as Battery from 'expo-battery';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { palette } from '@/constants/design';
-import { startMonitoringAudioSession, stopMonitoringAudioSession } from '@/livekit/audio-session';
 import type {
   RealtimeIceCandidate,
   RealtimeServerMessage,
@@ -122,7 +121,7 @@ export function BabyRoom({
           );
         }
       };
-      peer.channel.onmessage = (event) => {
+      peer.channel.onmessage = (event: unknown) => {
         const data = (event as unknown as { data?: unknown }).data;
         if (typeof data !== 'string') return;
         try {
@@ -175,7 +174,7 @@ export function BabyRoom({
         const sender = pc.addTrack(track, media);
         if (track.kind === 'video') peer.videoSender = sender;
       }
-      pc.onicecandidate = (event) => {
+      pc.onicecandidate = (event: unknown) => {
         const candidate = (event as unknown as { candidate?: { toJSON(): RealtimeIceCandidate } })
           .candidate;
         if (!candidate) return;
@@ -198,7 +197,7 @@ export function BabyRoom({
         }
         updateParentCount();
       };
-      pc.ontrack = (event) => {
+      pc.ontrack = (event: unknown) => {
         const track = (event as unknown as { track?: MediaStreamTrack }).track;
         if (track?.kind === 'audio') track._setVolume(1);
       };
@@ -248,7 +247,6 @@ export function BabyRoom({
 
     async function start() {
       try {
-        await startMonitoringAudioSession('baby');
         media = await mediaDevices.getUserMedia({
           audio: true,
           video: {
@@ -329,7 +327,6 @@ export function BabyRoom({
       closeAllPeers();
       media?.getTracks().forEach((track) => track.stop());
       setLocalStream(null);
-      void stopMonitoringAudioSession();
     };
   }, [
     onError,

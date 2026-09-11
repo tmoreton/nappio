@@ -67,7 +67,7 @@ export async function notifyMonitoringInterrupted(reason: string): Promise<void>
   if (permission !== 'granted') return;
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Nappio monitoring stopped',
+      title: 'NapNear monitoring stopped',
       body: reason,
       sound: 'default',
       interruptionLevel: 'timeSensitive',
@@ -83,7 +83,7 @@ export async function notifySoundDetected(): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: 'Sound detected',
-      body: 'Nappio heard sustained sound from the Baby Unit. Open Nappio to listen.',
+      body: 'NapNear heard sustained sound from the Baby Unit. Open NapNear to listen.',
       sound: 'default',
       interruptionLevel: 'timeSensitive',
       data: { kind: 'sound-detected' },
@@ -97,7 +97,7 @@ export async function notifyMonitoringTest(): Promise<void> {
   if (permission !== 'granted') return;
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Nappio alerts are working',
+      title: 'NapNear alerts are working',
       body: 'You will hear an alert for sustained sound, a lost connection, or low Baby Unit power.',
       sound: 'default',
       interruptionLevel: 'timeSensitive',

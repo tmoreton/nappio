@@ -89,7 +89,7 @@ export default function HomeScreen() {
     <Screen contentStyle={styles.content} scroll>
       <View style={styles.brand}>
         <BrandMark />
-        <Text style={styles.wordmark}>Nappio</Text>
+        <Text style={styles.wordmark}>NapNear</Text>
       </View>
 
       <View style={styles.main}>

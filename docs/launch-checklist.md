@@ -1,4 +1,4 @@
-# Nappio launch checklist
+# NapNear launch checklist
 
 ## Automated and repository checks
 
@@ -9,8 +9,8 @@
 - [x] `EXPO_WEB_BASE_URL=/nappio npx expo export --platform web` succeeds.
 - [x] EAS production build 20 completes for App Store distribution, uploads successfully, and is marked valid and in internal testing by TestFlight.
 - [ ] The release build runs correctly on a 13-inch iPad in portrait and landscape, including a resized iPad window.
-- [ ] The GitHub repository has an `EXPO_TOKEN` Actions secret scoped to the Nappio Expo project.
-- [ ] A push to `main` completes the **Publish Nappio OTA update** workflow and publishes to the `production` channel.
+- [ ] The GitHub repository has an `EXPO_TOKEN` Actions secret scoped to the NapNear Expo project.
+- [ ] A push to `main` completes the **Publish NapNear OTA update** workflow and publishes to the `production` channel.
 - [ ] A production build downloads a compatible update, applies it after reopening, and never rolls back to an older update.
 - [ ] The repository contains `CLOUDFLARE_ACCOUNT_ID`, and the GitHub `production` environment contains a narrowly scoped `CLOUDFLARE_API_TOKEN` secret.
 - [ ] The repository contains `CLOUDFLARE_ANALYTICS_TOKEN`, and `TURN_DAILY_EGRESS_WARN_GB` matches the accepted budget.
@@ -24,6 +24,7 @@
 - [ ] On a fresh install, confirm onboarding appears once; complete or skip it, relaunch, and confirm the role chooser opens directly.
 - [ ] Replay the welcome guide from Help & support and confirm Back, Continue, and Choose a role all work.
 - [ ] Confirm releasing push-to-talk, backgrounding the Parent app, and disconnecting the Baby Unit all stop the Parent microphone.
+- [ ] Confirm backgrounding or locking the Parent does not switch video monitoring to Audio Only, and that video resumes immediately after returning to the app.
 - [ ] Confirm each sound-alert sensitivity persists after relaunch and does not repeat within its cooldown.
 - [ ] Advance or shorten the test expiry and confirm authenticated use renews each role without re-pairing.
 - [ ] Leave both phones running for an overnight soak test while connected to power.
@@ -35,7 +36,7 @@
 - [x] Sync the title, description, keywords, URLs, categories, age rating, and manual-release setting from `store.config.json`.
 - [x] Confirm the privacy-policy URL: `https://tmoreton.github.io/nappio/#privacy-policy`.
 - [x] Confirm the support URL: `https://tmoreton.github.io/nappio/#support`.
-- [ ] Complete App Privacy answers using `docs/app-store-privacy.md` and the actual Cloudflare logging/retention settings. Do not assume “Data Not Collected” solely because Nappio has no accounts or recording.
+- [ ] Complete App Privacy answers using `docs/app-store-privacy.md` and the actual Cloudflare logging/retention settings. Do not assume “Data Not Collected” solely because NapNear has no accounts or recording.
 - [ ] Review the export-compliance answer for WebRTC encryption. The repository currently declares that it does not use non-exempt encryption; the developer is responsible for confirming that classification.
 - [ ] Confirm the camera, microphone, notification, and background-audio descriptions shown by the uploaded build.
 - [x] Upload the five `1320 x 2868` iPhone screenshots from `app-store/screenshots/iphone-6.9`.

@@ -7,7 +7,6 @@ import {
   AppState,
   Linking,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,7 +19,6 @@ import { ActionButton } from '@/components/action-button';
 import { ConnectionStatus } from '@/components/connection-status';
 import { Screen } from '@/components/screen';
 import { palette, radii, spacing } from '@/constants/design';
-import { showMonitoringAudioRoutePicker } from '@/livekit/audio-session';
 import { ParentRoom } from '@/realtime/parent-room';
 import {
   formatBabyDeviceStatus,
@@ -62,12 +60,10 @@ export default function MonitorScreen() {
   const [soundSensitivity, setSoundSensitivity] = useState<SoundAlertSensitivity>('standard');
   const [babyDeviceStatus, setBabyDeviceStatus] = useState<ReceivedBabyDeviceStatus | null>(null);
   const [statusClock, setStatusClock] = useState(0);
-  const [pipRequest, setPipRequest] = useState(0);
   const [talking, setTalking] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const appState = useRef(AppState.currentState);
   const talkPressHeld = useRef(false);
-  const pipRequested = useRef(false);
   const connectedOnce = useRef(false);
   const babySeen = useRef(false);
   const interruptionAlertSent = useRef(false);
@@ -89,7 +85,7 @@ export default function MonitorScreen() {
     ) {
       interruptionAlertSent.current = true;
       void notifyMonitoringInterrupted(
-        'The connection to the Baby Unit was interrupted. Open Nappio to reconnect.',
+        'The connection to the Baby Unit was interrupted. Open NapNear to reconnect.',
       ).catch((notificationError: unknown) => {
         console.warn('Could not show the monitoring interruption alert.', notificationError);
       });
@@ -102,7 +98,7 @@ export default function MonitorScreen() {
     if (connectedOnce.current && appState.current !== 'active' && !interruptionAlertSent.current) {
       interruptionAlertSent.current = true;
       void notifyMonitoringInterrupted(
-        'The connection to the Baby Unit was interrupted. Open Nappio to reconnect.',
+        'The connection to the Baby Unit was interrupted. Open NapNear to reconnect.',
       ).catch((notificationError: unknown) => {
         console.warn('Could not show the monitoring interruption alert.', notificationError);
       });
@@ -117,7 +113,7 @@ export default function MonitorScreen() {
     } else if (babySeen.current && appState.current !== 'active' && !interruptionAlertSent.current) {
       interruptionAlertSent.current = true;
       void notifyMonitoringInterrupted(
-        'The Baby Unit left the monitoring room. Open Nappio to check it.',
+        'The Baby Unit left the monitoring room. Open NapNear to check it.',
       ).catch((notificationError: unknown) => {
         console.warn('Could not show the monitoring interruption alert.', notificationError);
       });
@@ -226,9 +222,7 @@ export default function MonitorScreen() {
       if (nextState !== 'active') {
         talkPressHeld.current = false;
         setTalking(false);
-        if (!pipRequested.current) setAudioOnly(true);
       } else {
-        pipRequested.current = false;
         void getMonitoringAlertPermission().then(setAlertPermission).catch(() => undefined);
       }
     });
@@ -256,15 +250,6 @@ export default function MonitorScreen() {
     void saveSoundAlertSensitivity(sensitivity).catch((preferenceError: unknown) => {
       console.warn('Could not save monitoring preferences.', preferenceError);
     });
-  }
-
-  function startPictureInPicture() {
-    if (Platform.OS !== 'ios' || audioOnly || !babyConnected) return;
-    pipRequested.current = true;
-    setPipRequest((request) => request + 1);
-    setTimeout(() => {
-      if (appState.current === 'active') pipRequested.current = false;
-    }, 2_000);
   }
 
   async function beginTalking() {
@@ -358,7 +343,6 @@ export default function MonitorScreen() {
           key={parentSession.recoveryToken}
           session={parentSession}
           audioOnly={audioOnly}
-          pipRequest={pipRequest}
           talking={talking}
           soundSensitivity={soundSensitivity}
           onStatusChange={handleStatusChange}
@@ -375,19 +359,8 @@ export default function MonitorScreen() {
             <View style={styles.topRow}>
               <ConnectionStatus compact status={status} label={statusLabel} />
               <View style={styles.topActions}>
-                {Platform.OS === 'ios' && !audioOnly ? (
-                  <Pressable
-                    accessibilityHint="Keeps the live video visible over other apps"
-                    accessibilityLabel="Open Picture in Picture"
-                    accessibilityRole="button"
-                    disabled={!babyConnected}
-                    onPress={startPictureInPicture}
-                    style={[styles.routeButton, !babyConnected && styles.disabledButton]}>
-                    <Text style={styles.routeButtonText}>PiP</Text>
-                  </Pressable>
-                ) : null}
                 <Pressable
-                  accessibilityHint="Opens audio output and monitoring alert options"
+                  accessibilityHint="Opens monitoring alert options"
                   accessibilityLabel="Monitor settings"
                   accessibilityRole="button"
                   hitSlop={6}
@@ -487,21 +460,6 @@ export default function MonitorScreen() {
           <ScrollView
             contentContainerStyle={styles.settingsContent}
             showsVerticalScrollIndicator={false}>
-            {Platform.OS === 'ios' ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => void showMonitoringAudioRoutePicker()}
-                style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}>
-                <View style={styles.settingsRowCopy}>
-                  <Text style={styles.settingsRowTitle}>Audio output</Text>
-                  <Text style={styles.settingsRowDetail}>
-                    Choose this phone, a speaker, or headphones.
-                  </Text>
-                </View>
-                <Text style={styles.settingsChevron}>›</Text>
-              </Pressable>
-            ) : null}
-
             {babyDeviceStatus ? (
               <View style={styles.settingsSection}>
                 <Text style={styles.settingsSectionLabel}>BABY UNIT</Text>
@@ -516,7 +474,7 @@ export default function MonitorScreen() {
               <Text style={styles.settingsSectionValue}>
                 {alertPermission === 'granted'
                   ? 'Sound, connection, and Baby Unit power alerts are on.'
-                  : 'Optional alerts can notify you while Nappio is in the background.'}
+                  : 'Optional alerts can notify you while NapNear is in the background.'}
               </Text>
               {alertPermission === 'granted' ? (
                 <>
@@ -600,7 +558,6 @@ const styles = StyleSheet.create({
     minWidth: 46,
     paddingHorizontal: 13,
   },
-  routeButtonText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
   optionsButtonText: { color: palette.ink, fontSize: 15, fontWeight: '800', letterSpacing: 1 },
   disabledButton: { opacity: 0.45 },
   deviceStatus: {
@@ -703,21 +660,6 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   closeButtonText: { color: palette.sageDark, fontSize: 13, fontWeight: '800' },
-  settingsRow: {
-    alignItems: 'center',
-    backgroundColor: palette.paper,
-    borderColor: palette.line,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginBottom: 12,
-    minHeight: 74,
-    padding: spacing.md,
-  },
-  settingsRowCopy: { flex: 1 },
-  settingsRowTitle: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-  settingsRowDetail: { color: palette.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
-  settingsChevron: { color: palette.sageDark, fontSize: 30, fontWeight: '300', marginLeft: spacing.sm },
   settingsSection: {
     backgroundColor: palette.paper,
     borderColor: palette.line,

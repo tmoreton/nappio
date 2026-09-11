@@ -4,13 +4,11 @@ import {
   type MediaStreamTrack,
   RTCPeerConnection,
   RTCView,
-  startIOSPIP,
-} from '@livekit/react-native-webrtc';
-import { type ComponentRef, useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+} from 'react-native-webrtc';
+import { useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { palette, spacing } from '@/constants/design';
-import { startMonitoringAudioSession, stopMonitoringAudioSession } from '@/livekit/audio-session';
 import {
   parseBabyDeviceStatusValue,
   type BabyDeviceStatus,
@@ -45,7 +43,6 @@ type RTCDataChannel = ReturnType<RTCPeerConnection['createDataChannel']>;
 type ParentRoomProps = {
   session: MonitorSession;
   audioOnly: boolean;
-  pipRequest: number;
   talking: boolean;
   soundSensitivity: SoundAlertSensitivity;
   onStatusChange: (status: MonitorStatus) => void;
@@ -60,7 +57,6 @@ type ParentRoomProps = {
 export function ParentRoom({
   session,
   audioOnly,
-  pipRequest,
   talking,
   soundSensitivity,
   onStatusChange,
@@ -74,7 +70,6 @@ export function ParentRoom({
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [volume, setVolume] = useState(0);
   const { recoveryToken, role, roomId } = session;
-  const videoRef = useRef<ComponentRef<typeof RTCView>>(null);
   const audioOnlyRef = useRef(audioOnly);
   const talkingRef = useRef(talking);
   const sensitivityRef = useRef(soundSensitivity);
@@ -125,7 +120,7 @@ export function ParentRoom({
     function configureControlChannel(channel: RTCDataChannel) {
       controlRef.current = channel;
       channel.onopen = sendVideoPreference;
-      channel.onmessage = (event) => {
+      channel.onmessage = (event: unknown) => {
         const data = (event as unknown as { data?: unknown }).data;
         if (typeof data !== 'string') return;
         try {
@@ -170,7 +165,7 @@ export function ParentRoom({
           const track = stream.getAudioTracks()[0];
           if (!track) {
             stream.getTracks().forEach((candidate) => candidate.stop());
-            throw new Error('Nappio could not find an available microphone.');
+            throw new Error('NapNear could not find an available microphone.');
           }
           track.enabled = true;
           micStreamRef.current = stream;
@@ -287,7 +282,7 @@ export function ParentRoom({
           });
       }
 
-      pc.onicecandidate = (event) => {
+      pc.onicecandidate = (event: unknown) => {
         const candidate = (event as unknown as { candidate?: { toJSON(): RealtimeIceCandidate } })
           .candidate;
         if (!candidate || pcRef.current !== pc || !babyPeerId || !connectionId) return;
@@ -303,11 +298,11 @@ export function ParentRoom({
           },
         });
       };
-      pc.ondatachannel = (event) => {
+      pc.ondatachannel = (event: unknown) => {
         const channel = (event as unknown as { channel?: RTCDataChannel }).channel;
         if (channel?.label === 'nappio-control') configureControlChannel(channel);
       };
-      pc.ontrack = (event) => {
+      pc.ontrack = (event: unknown) => {
         const { streams, track } = event as unknown as {
           streams?: MediaStream[];
           track?: MediaStreamTrack;
@@ -408,8 +403,6 @@ export function ParentRoom({
 
     async function start() {
       try {
-        await startMonitoringAudioSession('parent');
-        if (disposed) return;
         signaling = new RealtimeSignalingConnection({ recoveryToken, role, roomId }, {
           onReady: (details) => {
             iceServers = details.iceServers;
@@ -489,7 +482,6 @@ export function ParentRoom({
       signaling?.stop();
       closePeer();
       releaseTalkTrack();
-      void stopMonitoringAudioSession();
     };
   }, [
     onBabyConnectedChange,
@@ -521,12 +513,6 @@ export function ParentRoom({
     else releaseTalkTrackRef.current?.();
   }, [talking]);
 
-  useEffect(() => {
-    if (Platform.OS === 'ios' && pipRequest > 0 && remoteStream && !audioOnly) {
-      startIOSPIP(videoRef);
-    }
-  }, [audioOnly, pipRequest, remoteStream]);
-
   if (audioOnly) {
     return <AudioOnlyView volume={volume} connected={Boolean(remoteStream?.getAudioTracks().length)} />;
   }
@@ -535,13 +521,6 @@ export function ParentRoom({
   }
   return (
     <RTCView
-      ref={videoRef}
-      iosPIP={{
-        enabled: true,
-        preferredSize: { width: 9, height: 16 },
-        startAutomatically: false,
-        stopAutomatically: true,
-      }}
       objectFit="cover"
       streamURL={remoteStream.toURL()}
       style={styles.video}

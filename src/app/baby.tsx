@@ -10,7 +10,7 @@ import { ConnectionStatus } from '@/components/connection-status';
 import { PairingCode } from '@/components/pairing-code';
 import { palette, radii, spacing } from '@/constants/design';
 import { BabyRoom } from '@/realtime/baby-room';
-import { useMonitoringKeepAwake } from '@/livekit/use-monitoring-keep-awake';
+import { useMonitoringKeepAwake } from '@/monitoring/use-monitoring-keep-awake';
 import { createPairing, endSession, PairingApiError, resumeSession } from '@/pairing/api';
 import { useMonitorSession } from '@/state/monitor-session';
 import type { MonitorStatus } from '@/types/monitor';

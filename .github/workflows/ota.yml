@@ -1,4 +1,4 @@
-name: Publish Nappio OTA update
+name: Publish NapNear OTA update
 
 on:
   push:

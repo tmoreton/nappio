@@ -78,7 +78,7 @@ export default function PairScreen() {
             onBarcodeScanned={({ data }) => {
               const scannedCode = pairingCodeFromQr(data);
               if (!scannedCode) {
-                setError('That QR code is not a Nappio pairing code.');
+                setError('That QR code is not a NapNear pairing code.');
                 return;
               }
               setScanning(false);

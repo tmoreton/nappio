@@ -18,7 +18,7 @@ const androidPermissions = config.android?.permissions ?? [];
 
 if (Object.hasOwn(entitlements, 'aps-environment')) {
   throw new Error(
-    'Nappio uses local notifications only; the generated iOS app must not include the APNs entitlement.',
+    'NapNear uses local notifications only; the generated iOS app must not include the APNs entitlement.',
   );
 }
 

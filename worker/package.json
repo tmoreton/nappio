@@ -1,6 +1,6 @@
 {
   "name": "nappio-pairing-worker",
-  "description": "Cloudflare pairing, signaling, session, and TURN credential service for Nappio.",
+  "description": "Cloudflare pairing, signaling, session, and TURN credential service for NapNear.",
   "version": "1.0.0",
   "author": "Tim Moreton",
   "license": "Apache-2.0",
