@@ -47,7 +47,7 @@ export default function SupportScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="link"
-            onPress={() => void Linking.openURL('https://github.com/tmoreton/nappio/issues/new')}
+            onPress={() => void Linking.openURL('https://github.com/tmoreton/NapNear/issues/new')}
             style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
             <Text style={styles.secondaryText}>Report a technical issue ↗</Text>
           </Pressable>

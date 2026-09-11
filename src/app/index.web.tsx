@@ -268,7 +268,7 @@ export default function LandingPage() {
             </div>
             <div className={styles.supportActions}>
               <a className={styles.primaryCta} href="mailto:tmoreton89@gmail.com?subject=NapNear%20support">Email support <span>↗</span></a>
-              <a className={styles.textLink} href="https://github.com/tmoreton/nappio/issues/new">Report an issue <span>↗</span></a>
+              <a className={styles.textLink} href="https://github.com/tmoreton/NapNear/issues/new">Report an issue <span>↗</span></a>
             </div>
           </section>
         </main>

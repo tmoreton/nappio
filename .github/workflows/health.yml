@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   health:
-    if: github.repository == 'tmoreton/nappio'
+    if: github.repository == 'tmoreton/NapNear'
     runs-on: ubuntu-latest
     steps:
       - name: Check pairing API

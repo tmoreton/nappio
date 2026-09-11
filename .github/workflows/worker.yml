@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.repository == 'tmoreton/nappio'
+    if: github.repository == 'tmoreton/NapNear'
     runs-on: ubuntu-latest
     environment: production
     steps:

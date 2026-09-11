@@ -1,7 +1,7 @@
 # NapNear
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Verify NapNear changes](https://github.com/tmoreton/nappio/actions/workflows/quality.yml/badge.svg)](https://github.com/tmoreton/nappio/actions/workflows/quality.yml)
+[![Verify NapNear changes](https://github.com/tmoreton/NapNear/actions/workflows/quality.yml/badge.svg)](https://github.com/tmoreton/NapNear/actions/workflows/quality.yml)
 
 NapNear turns phones into a private baby monitor. One phone is the **Baby Unit** and sends its camera and microphone to as many as three **Parent Units**. Each Parent can watch, keep monitoring when the app is backgrounded or the screen is locked, switch to audio only, or hold to talk back.
 
@@ -162,7 +162,7 @@ NAPPIO_IOS_BUNDLE_IDENTIFIER=com.example.nappio
 NAPPIO_ANDROID_PACKAGE=com.example.nappio
 ```
 
-If you do not use EAS, remove or replace the official `owner`, `extra.eas`, `updates`, and store submission values in `app.json` and `eas.json`. The repository's deployment workflows are intentionally limited to `tmoreton/nappio`; a fork can adapt those guards and secrets for its own infrastructure.
+If you do not use EAS, remove or replace the official `owner`, `extra.eas`, `updates`, and store submission values in `app.json` and `eas.json`. The repository's deployment workflows are intentionally limited to `tmoreton/NapNear`; a fork can adapt those guards and secrets for its own infrastructure.
 
 ## Verify changes
 

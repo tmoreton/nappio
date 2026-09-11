@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "author": "Tim Moreton",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/tmoreton/nappio#readme",
+  "homepage": "https://github.com/tmoreton/NapNear#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tmoreton/nappio.git",
+    "url": "git+https://github.com/tmoreton/NapNear.git",
     "directory": "worker"
   },
   "engines": {
