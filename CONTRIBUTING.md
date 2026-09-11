@@ -36,7 +36,7 @@ Run these checks before submitting a pull request:
 ```sh
 npm run check
 npx expo-doctor
-EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
+npx expo export --platform web
 npm --prefix worker run deploy -- --dry-run
 ```
 

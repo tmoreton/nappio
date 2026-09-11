@@ -6,7 +6,7 @@
 - Cloudflare Durable Objects: `PAIRINGS`, SQLite-backed, 100 routed shards plus the legacy coordinator
 - Cloudflare Realtime TURN: credentials minted by the Worker only when direct WebRTC needs a relay
 - Mobile delivery: EAS Update `production` channel for compatible JavaScript/assets; a new App Store build for native changes
-- Public policy/support site: `https://tmoreton.github.io/nappio/`
+- Public policy/support site: `https://napnear.com/`
 
 ## Required secrets and controls
 
@@ -28,7 +28,7 @@ npm ci
 npm --prefix worker ci
 npm run check
 npx expo-doctor
-EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
+npx expo export --platform web
 npm --prefix worker run deploy -- --dry-run
 ```
 

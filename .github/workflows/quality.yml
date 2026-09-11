@@ -28,5 +28,3 @@ jobs:
         run: npx expo-doctor
       - name: Verify static export
         run: npx expo export --platform web
-        env:
-          EXPO_WEB_BASE_URL: /nappio

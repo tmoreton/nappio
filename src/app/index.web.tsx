@@ -101,11 +101,11 @@ export default function LandingPage() {
           content="An encrypted baby monitor made from the phones you already have."
         />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://tmoreton.github.io/nappio/" />
+        <meta property="og:url" content="https://napnear.com/" />
         <meta property="og:site_name" content="NapNear" />
         <meta
           property="og:image"
-          content="https://tmoreton.github.io/nappio/og.png"
+          content="https://napnear.com/og.png"
         />
         <meta property="og:image:type" content="image/png" />
         <meta property="og:image:width" content="1731" />
@@ -122,13 +122,13 @@ export default function LandingPage() {
         />
         <meta
           name="twitter:image"
-          content="https://tmoreton.github.io/nappio/og.png"
+          content="https://napnear.com/og.png"
         />
         <meta
           name="twitter:image:alt"
           content="NapNear — Rest easy. Stay close. A private baby monitor between your devices."
         />
-        <link rel="canonical" href="https://tmoreton.github.io/nappio/" />
+        <link rel="canonical" href="https://napnear.com/" />
       </Head>
 
       <div className={styles.site}>

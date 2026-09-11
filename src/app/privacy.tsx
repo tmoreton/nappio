@@ -4,7 +4,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '@/components/screen';
 import { palette, radii, spacing, type } from '@/constants/design';
 
-const POLICY_URL = 'https://tmoreton.github.io/nappio/#privacy-policy';
+const POLICY_URL = 'https://napnear.com/#privacy-policy';
 
 const sections = [
   {

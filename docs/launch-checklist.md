@@ -6,7 +6,7 @@
 - [ ] `npm --prefix worker ci` completes from a clean checkout.
 - [x] `npm run check` passes lint, TypeScript, protocol tests, and Cloudflare-runtime tests on the WebRTC branch.
 - [x] `npx expo-doctor` reports every project check passing.
-- [x] `EXPO_WEB_BASE_URL=/nappio npx expo export --platform web` succeeds.
+- [x] `npx expo export --platform web` succeeds.
 - [x] EAS production build 20 completes for App Store distribution, uploads successfully, and is marked valid and in internal testing by TestFlight.
 - [ ] The release build runs correctly on a 13-inch iPad in portrait and landscape, including a resized iPad window.
 - [ ] The GitHub repository has an `EXPO_TOKEN` Actions secret scoped to the NapNear Expo project.
@@ -34,8 +34,8 @@
 ## App Store Connect decisions that require the developer
 
 - [x] Sync the title, description, keywords, URLs, categories, age rating, and manual-release setting from `store.config.json`.
-- [x] Confirm the privacy-policy URL: `https://tmoreton.github.io/nappio/#privacy-policy`.
-- [x] Confirm the support URL: `https://tmoreton.github.io/nappio/#support`.
+- [x] Confirm the privacy-policy URL: `https://napnear.com/#privacy-policy`.
+- [x] Confirm the support URL: `https://napnear.com/#support`.
 - [ ] Complete App Privacy answers using `docs/app-store-privacy.md` and the actual Cloudflare logging/retention settings. Do not assume “Data Not Collected” solely because NapNear has no accounts or recording.
 - [ ] Review the export-compliance answer for WebRTC encryption. The repository currently declares that it does not use non-exempt encryption; the developer is responsible for confirming that classification.
 - [ ] Confirm the camera, microphone, notification, and background-audio descriptions shown by the uploaded build.

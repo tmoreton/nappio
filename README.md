@@ -9,7 +9,7 @@ The media path is peer to peer whenever the network allows it. A small Cloudflar
 
 > NapNear is not a medical device and is not a substitute for direct adult supervision.
 
-- [Project website](https://tmoreton.github.io/nappio/)
+- [Project website](https://napnear.com/)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [Apache-2.0 license](LICENSE)
@@ -170,7 +170,7 @@ Run the repeatable local checks:
 ```sh
 npm run check
 npx expo-doctor
-EXPO_WEB_BASE_URL=/nappio npx expo export --platform web
+npx expo export --platform web
 npm --prefix worker run deploy -- --dry-run
 ```
 

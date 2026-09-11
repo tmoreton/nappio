@@ -6,9 +6,9 @@ NapNear Baby Monitor
 
 ## URLs
 
-- Privacy policy: `https://tmoreton.github.io/nappio/#privacy-policy`
-- Support: `https://tmoreton.github.io/nappio/#support`
-- Marketing: `https://tmoreton.github.io/nappio/`
+- Privacy policy: `https://napnear.com/#privacy-policy`
+- Support: `https://napnear.com/#support`
+- Marketing: `https://napnear.com/`
 
 ## Subtitle
 
