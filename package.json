@@ -71,5 +71,14 @@
     "verify:expo-config": "node scripts/verify-expo-config.mjs",
     "check": "npm run lint && npm run typecheck && npm run check:scripts && npm run verify:expo-config && npm test"
   },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-webrtc"
+        ]
+      }
+    }
+  },
   "private": true
 }
